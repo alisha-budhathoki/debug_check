@@ -4,6 +4,7 @@ description: >-
   console, live performance (FPS/jank) monitor, layout grid inspector and a
   shareable app-info snapshot. Fully decoupled from the host app; wired through
   a single DebugTools facade.
+repository: https://github.com/alisha-budhathoki/debug_check.git
 version: 0.1.0
 publish_to: "none"
 
