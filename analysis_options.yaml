@@ -1,0 +1,6 @@
+include: package:flutter_lints/flutter.yaml
+
+linter:
+  rules:
+    # Public debug package — keep the API documented and tidy.
+    prefer_const_constructors: true

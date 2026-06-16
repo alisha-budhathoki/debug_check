@@ -1,0 +1,20 @@
+name: debug_deck
+description: >-
+  Isolated, drop-in Flutter debug tools — network/API inspector, log & error
+  console, live performance (FPS/jank) monitor, layout grid inspector and a
+  shareable app-info snapshot. Fully decoupled from the host app; wired through
+  a single DebugTools facade.
+version: 0.1.0
+publish_to: "none"
+
+environment:
+  sdk: ^3.7.0
+  flutter: ">=3.0.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  dio: ^5.4.3+1
+
+dev_dependencies:
+  flutter_lints: ^5.0.0
