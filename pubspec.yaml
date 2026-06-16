@@ -6,8 +6,7 @@ description: >-
   a single DebugTools facade.
 repository: https://github.com/alisha-budhathoki/debug_check.git
 version: 0.1.0
-publish_to: "none"
-
+publish_to: https://pub.dev
 environment:
   sdk: ^3.7.0
   flutter: ">=3.0.0"
