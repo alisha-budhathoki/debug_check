@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.2.1
+
+- Docs: the README screenshot gallery now uses absolute image URLs so it renders
+  on the pub.dev page (in addition to the Screenshots carousel).
+
 ## 0.2.0
 
 - Insight chips on the API detail header — auto-derived `SLOW`, `SERVER 500`,

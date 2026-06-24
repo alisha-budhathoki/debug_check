@@ -6,25 +6,25 @@ host app and switched on with a single flag.
 <table>
   <tr>
     <td align="center" width="33%">
-      <img src="screenshots/01-log-list.png" alt="Inspector log list with method/status badges, latency colours and duplicate detection"><br>
-      <sub><b>Inspector</b> · calls, errors & duplicates</sub>
+      <img width="250" src="https://raw.githubusercontent.com/alisha-budhathoki/debug_check/main/screenshots/01-log-list.png" alt="Inspector log list with method/status badges, latency colours and duplicate detection"><br>
+      <sub><b>Inspector</b> · calls, errors &amp; duplicates</sub>
     </td>
     <td align="center" width="33%">
-      <img src="screenshots/03-search-response.png" alt="Search inside a response body with highlighted matches and jump-to-match navigation"><br>
+      <img width="250" src="https://raw.githubusercontent.com/alisha-budhathoki/debug_check/main/screenshots/03-search-response.png" alt="Search inside a response body with highlighted matches and jump-to-match navigation"><br>
       <sub><b>Search a response</b> · jump to each match</sub>
     </td>
     <td align="center" width="33%">
-      <img src="screenshots/02-api-detail.png" alt="API call detail with insight chips and cURL/JSON/HAR export"><br>
-      <sub><b>Call detail</b> · insight chips & export</sub>
+      <img width="250" src="https://raw.githubusercontent.com/alisha-budhathoki/debug_check/main/screenshots/02-api-detail.png" alt="API call detail with insight chips and cURL/JSON/HAR export"><br>
+      <sub><b>Call detail</b> · insight chips &amp; export</sub>
     </td>
   </tr>
   <tr>
     <td align="center" width="33%">
-      <img src="screenshots/04-performance.png" alt="Live performance monitor with FPS gauge, jank split and frame-time sparkline"><br>
-      <sub><b>Performance</b> · FPS, jank & frames</sub>
+      <img width="250" src="https://raw.githubusercontent.com/alisha-budhathoki/debug_check/main/screenshots/04-performance.png" alt="Live performance monitor with FPS gauge, jank split and frame-time sparkline"><br>
+      <sub><b>Performance</b> · FPS, jank &amp; frames</sub>
     </td>
     <td align="center" width="33%">
-      <img src="screenshots/05-app-info.png" alt="App-info snapshot with build, API stats, errors and device facts"><br>
+      <img width="250" src="https://raw.githubusercontent.com/alisha-budhathoki/debug_check/main/screenshots/05-app-info.png" alt="App-info snapshot with build, API stats, errors and device facts"><br>
       <sub><b>App-info snapshot</b> · copy for reports</sub>
     </td>
     <td align="center" width="33%"></td>

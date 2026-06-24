@@ -5,7 +5,7 @@ description: >-
   shareable app-info snapshot. Fully decoupled from the host app; wired through
   a single DebugTools facade.
 repository: https://github.com/alisha-budhathoki/debug_check.git
-version: 0.2.0
+version: 0.2.1
 environment:
   sdk: ^3.7.0
   flutter: ">=3.0.0"
