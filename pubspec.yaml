@@ -18,6 +18,13 @@ dependencies:
 dev_dependencies:
   flutter_lints: ^5.0.0
 
+screenshots:
+  - description: >-
+      The Debug overlay's API inspector — Dio requests with method, status,
+      path, timing and size, plus tabbed filters (API, Errors, Info, Perf, Grid)
+      and search.
+    path: screenshots/api-inspector.png
+
 platforms:
   android:
   ios:

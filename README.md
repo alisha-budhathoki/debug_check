@@ -3,6 +3,10 @@
 Isolated, drop-in **in-app debug tools** for Flutter — fully decoupled from the
 host app and switched on with a single flag.
 
+<p align="center">
+  <img src="screenshots/api-inspector.png" alt="debug_deck API inspector overlay" width="320">
+</p>
+
 What you get, as a floating overlay (a draggable bug chip → full viewer):
 
 - **API inspector** — every Dio request/response with headers, query, bodies,
