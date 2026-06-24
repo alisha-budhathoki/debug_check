@@ -423,5 +423,3 @@ String _shortPath(String? url) {
   final p = u.path.isEmpty ? '/' : u.path;
   return p.length > 40 ? '${p.substring(0, 37)}…' : p;
 }
-
-

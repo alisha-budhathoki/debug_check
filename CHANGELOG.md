@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.2.2
+
+- Full 160/160 pub.dev score: shortened the package description to the 60–180
+  character range, applied `dart format`, and made the package WASM-compatible
+  by moving the `dart:io` platform lookups behind a conditional import (web
+  builds use a stub).
+
 ## 0.2.1
 
 - Docs: the README screenshot gallery now uses absolute image URLs so it renders

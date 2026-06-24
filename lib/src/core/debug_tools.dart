@@ -120,10 +120,7 @@ class DebugToolsHost extends StatelessWidget {
   Widget build(BuildContext context) {
     if (!DebugTools.enabled) return child;
     return Stack(
-      children: [
-        DebugInspectorScope(child: child),
-        const DebugOverlay(),
-      ],
+      children: [DebugInspectorScope(child: child), const DebugOverlay()],
     );
   }
 }

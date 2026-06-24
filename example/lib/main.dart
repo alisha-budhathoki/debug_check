@@ -37,8 +37,9 @@ class DemoApp extends StatelessWidget {
         useMaterial3: true,
       ),
       // 2. Mount the overlay above every screen. Transparent when disabled.
-      builder: (context, child) =>
-          DebugToolsHost(child: child ?? const SizedBox.shrink()),
+      builder:
+          (context, child) =>
+              DebugToolsHost(child: child ?? const SizedBox.shrink()),
       // 3. Track the current screen for the Perf banner.
       navigatorObservers: [DebugTools.routeObserver],
       initialRoute: '/PortfolioScreen',

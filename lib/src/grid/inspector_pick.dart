@@ -308,4 +308,3 @@ class _InspectHud extends StatelessWidget {
 // ─── Long-press detail report ────────────────────────────────────────────────
 
 /// Full snapshot of a widget for the long-press "assistant" sheet.
-

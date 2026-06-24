@@ -1,9 +1,11 @@
-import 'dart:io' show Platform;
-
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 
 import 'package:debug_deck/debug_deck.dart';
+
+// Conditional import keeps the package Web/WASM-compatible: the web build pulls
+// in the stub (no dart:io), native builds get the real Platform lookups.
+import 'platform_info_stub.dart' if (dart.library.io) 'platform_info_io.dart';
 
 /// Snapshot of build/platform/device/runtime info, captured on demand. Cheap
 /// to construct; the only side effect is recording the very first read time
@@ -106,15 +108,15 @@ class AppInfoSnapshot {
               : 'RELEASE',
       environment: DebugTools.appInfo.environmentName,
       baseUrl: DebugTools.appInfo.baseUrl,
-      os: _safe(() => Platform.operatingSystem),
-      osVersion: _safe(() => Platform.operatingSystemVersion),
+      os: _safe(platformOperatingSystem),
+      osVersion: _safe(platformOperatingSystemVersion),
       dartVersion: _safe(() {
-        final v = Platform.version;
+        final v = platformDartVersion();
         // Trim "Dart 3.4.0 (stable) (...)" → "3.4.0"
         final match = RegExp(r'^(\S+)').firstMatch(v);
         return match?.group(1) ?? v;
       }),
-      processors: _safeInt(() => Platform.numberOfProcessors),
+      processors: _safeInt(platformNumberOfProcessors),
       localeName: PlatformDispatcher.instance.locale.toString(),
       timeZoneName: now.timeZoneName,
       screenSize: media.size,

@@ -187,4 +187,3 @@ class _InspectToolbarState extends State<_InspectToolbar> {
     );
   }
 }
-

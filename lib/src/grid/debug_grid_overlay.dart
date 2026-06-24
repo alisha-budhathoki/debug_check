@@ -13,7 +13,6 @@ part 'inspector_pick.dart';
 part 'inspector_report.dart';
 part 'inspector_toolbar.dart';
 
-
 /// Visual layout inspector for the debug overlay — a designer-style spacing grid
 /// plus Flutter's own layout/padding paint, toggled live across every screen.
 ///

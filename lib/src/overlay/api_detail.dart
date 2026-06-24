@@ -194,7 +194,9 @@ class _ApiDetailScreenState extends State<_ApiDetailScreen>
     } else if (s == 304) {
       out.add(const _Insight(Icons.bolt, 'NOT MODIFIED · CACHED', blue));
     } else if (s >= 400) {
-      out.add(_Insight(Icons.report_gmailerrorred_outlined, 'CLIENT $s', amber));
+      out.add(
+        _Insight(Icons.report_gmailerrorred_outlined, 'CLIENT $s', amber),
+      );
     }
 
     final ms = e.duration?.inMilliseconds;
@@ -210,7 +212,9 @@ class _ApiDetailScreenState extends State<_ApiDetailScreen>
 
     final b = e.responseBytes;
     if (b != null && b > 512 * 1024) {
-      out.add(_Insight(Icons.layers_outlined, 'LARGE · ${_apiBytes(b)}', amber));
+      out.add(
+        _Insight(Icons.layers_outlined, 'LARGE · ${_apiBytes(b)}', amber),
+      );
     }
 
     return out;
@@ -1092,4 +1096,3 @@ class _InsightChip extends StatelessWidget {
 
 /// Body code block reduced to only the lines that match the query, highlighted.
 /// Splits [text] around case-insensitive matches of [query], highlighting them.
-

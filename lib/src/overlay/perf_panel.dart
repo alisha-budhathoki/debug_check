@@ -98,7 +98,9 @@ class _PerfPanelState extends State<_PerfPanel> {
               child: Column(
                 children: [
                   Text(
-                    !s.hasData ? '—' : (s.isIdle ? 'idle' : s.fps.toStringAsFixed(0)),
+                    !s.hasData
+                        ? '—'
+                        : (s.isIdle ? 'idle' : s.fps.toStringAsFixed(0)),
                     style: TextStyle(
                       color: fpsColor,
                       fontSize: s.hasData && s.isIdle ? 30 : 56,
@@ -367,5 +369,3 @@ class _SparklinePainter extends CustomPainter {
   @override
   bool shouldRepaint(_SparklinePainter old) => !identical(old.totals, totals);
 }
-
-

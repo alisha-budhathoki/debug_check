@@ -405,4 +405,3 @@ class _StepButton extends StatelessWidget {
 ///
 /// Hit-testing targets the wrapped child's render object directly, so the
 /// debug overlay itself is never matched.
-

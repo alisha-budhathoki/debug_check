@@ -295,4 +295,3 @@ class _ReportSheet extends StatelessWidget {
 /// Inspect⇄Browse segmented toggle, a state-aware hint, and clear / exit — all
 /// in one neutral surface with a single accent, so enabling inspect doesn't
 /// drop a pile of colourful chips on screen.
-

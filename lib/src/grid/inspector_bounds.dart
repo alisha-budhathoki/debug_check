@@ -4,7 +4,7 @@ class _RenderHit {
   final RenderBox target;
   final EdgeInsets? padding;
   final List<HitTestEntry> path;
-  
+
   const _RenderHit({
     required this.target,
     required this.padding,
@@ -261,4 +261,3 @@ class _BoundsLegend extends StatelessWidget {
     );
   }
 }
-

@@ -295,7 +295,6 @@ Map<int, int> findDuplicateApiCalls(
 
 // ─── App info panel ──────────────────────────────────────────────────────────
 
-
 class _ViewerHeader extends StatelessWidget {
   final String filter;
   final ValueChanged<String> onFilterChange;
@@ -1041,5 +1040,3 @@ class _Divider extends StatelessWidget {
   Widget build(BuildContext context) =>
       const Divider(color: Colors.white12, height: 16, thickness: 1);
 }
-
-

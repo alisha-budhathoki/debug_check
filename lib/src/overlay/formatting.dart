@@ -264,4 +264,3 @@ List<TextSpan> _hlSpans(String text, String query, TextStyle base) {
   }
   return spans;
 }
-

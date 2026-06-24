@@ -295,4 +295,3 @@ class _DebugInspectorScopeState extends State<DebugInspectorScope> {
 }
 
 /// One render-tree hit: the chosen box, its nearest padding, and the full path.
-

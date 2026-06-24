@@ -330,5 +330,3 @@ class _StatusBadge extends StatelessWidget {
 }
 
 // ─── Event kind metadata ─────────────────────────────────────────────────────
-
-
