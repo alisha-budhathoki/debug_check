@@ -202,7 +202,14 @@ class _DebugOverlayState extends State<DebugOverlay>
         ValueListenableBuilder<Offset>(
           valueListenable: _position,
           builder: (context, pos, child) {
-            return Positioned(left: pos.dx, top: pos.dy, child: child!);
+            // While the full-screen viewer is open the chip is redundant (the
+            // header carries minimize/close/hide) and would just overlap the
+            // content, so it's hidden until the viewer is minimized or closed.
+            return Positioned(
+              left: pos.dx,
+              top: pos.dy,
+              child: Offstage(offstage: _viewerOpen, child: child!),
+            );
           },
           child: RepaintBoundary(
             child: _ChipHost(onTap: _toggleViewer, onDrag: _handleDrag),

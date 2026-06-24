@@ -20,10 +20,25 @@ dev_dependencies:
 
 screenshots:
   - description: >-
-      The Debug overlay's API inspector — Dio requests with method, status,
-      path, timing and size, plus tabbed filters (API, Errors, Info, Perf, Grid)
-      and search.
-    path: screenshots/api-inspector.png
+      The inspector log list — Dio calls with method/status badges, latency
+      colour-banding, duplicate-call detection and the captured error console.
+    path: screenshots/01-log-list.png
+  - description: >-
+      One API call in detail with auto-derived insight chips (SERVER 500,
+      SLOW), tabbed Overview/Request/Headers/Response, and cURL/JSON/HAR export.
+    path: screenshots/02-api-detail.png
+  - description: >-
+      Search inside a response body — every match highlighted, listed in a
+      results bar, with prev/next jump-to-match navigation.
+    path: screenshots/03-search-response.png
+  - description: >-
+      Live performance monitor — FPS gauge, dropped-frame ratio, worst frame,
+      UI/raster split and a frame-time sparkline, labelled with the screen.
+    path: screenshots/04-performance.png
+  - description: >-
+      The shareable app-info snapshot — build/env, API stats, error summary and
+      device/platform facts, copyable for bug reports.
+    path: screenshots/05-app-info.png
 
 platforms:
   android:

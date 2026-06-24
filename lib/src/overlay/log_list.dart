@@ -680,24 +680,42 @@ class _LogTileState extends State<_LogTile> {
             ),
             const Spacer(),
             if (e.duration != null) ...[
-              const Icon(Icons.timer_outlined, size: 11, color: Colors.white38),
+              Icon(
+                Icons.timer_outlined,
+                size: 11,
+                color: _latencyColor(e.duration!).withValues(alpha: 0.8),
+              ),
               const SizedBox(width: 2),
               Text(
                 '${e.duration!.inMilliseconds}ms',
-                style: const TextStyle(color: Colors.white60, fontSize: 11),
+                style: TextStyle(
+                  color: _latencyColor(e.duration!),
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                  fontFeatures: const [FontFeature.tabularFigures()],
+                ),
               ),
             ],
             if (e.responseBytes != null) ...[
               const SizedBox(width: 8),
-              const Icon(
+              Icon(
                 Icons.download_outlined,
                 size: 11,
-                color: Colors.white38,
+                color:
+                    e.responseBytes! > 512 * 1024
+                        ? const Color(0xFFE5C07B)
+                        : Colors.white38,
               ),
               const SizedBox(width: 2),
               Text(
                 _formatBytes(e.responseBytes!),
-                style: const TextStyle(color: Colors.white60, fontSize: 11),
+                style: TextStyle(
+                  color:
+                      e.responseBytes! > 512 * 1024
+                          ? const Color(0xFFE5C07B)
+                          : Colors.white60,
+                  fontSize: 11,
+                ),
               ),
             ],
           ],
@@ -965,6 +983,15 @@ class _LogTileState extends State<_LogTile> {
     if (b < 1024) return '${b}B';
     if (b < 1024 * 1024) return '${(b / 1024).toStringAsFixed(1)}KB';
     return '${(b / 1024 / 1024).toStringAsFixed(2)}MB';
+  }
+
+  // Latency banding so a slow call is obvious in the list without opening it:
+  // green ≤300ms, amber ≤1s, red beyond.
+  static Color _latencyColor(Duration d) {
+    final ms = d.inMilliseconds;
+    if (ms <= 300) return const Color(0xFF98C379);
+    if (ms <= 1000) return const Color(0xFFE5C07B);
+    return const Color(0xFFE06C75);
   }
 
   static String _buildCurl(DebugLogEntry e) {

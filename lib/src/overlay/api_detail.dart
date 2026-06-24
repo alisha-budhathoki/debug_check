@@ -100,53 +100,120 @@ class _ApiDetailScreenState extends State<_ApiDetailScreen>
   }
 
   Widget _header(DebugLogEntry e) {
+    final insights = _insightsFor(e);
     return Container(
       padding: const EdgeInsets.fromLTRB(4, 8, 8, 10),
       decoration: const BoxDecoration(
         color: Color(0xFF161B22),
         border: Border(bottom: BorderSide(color: Colors.white10)),
       ),
-      child: Row(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _HeaderIconButton(icon: Icons.arrow_back, onTap: widget.onBack),
-          _MethodBadge(method: e.method ?? '?'),
-          const SizedBox(width: 6),
-          _StatusBadge(kind: e.kind, statusCode: e.statusCode),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Text(
-              _apiPath(e.url),
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 13,
-                fontWeight: FontWeight.w700,
-                fontFamily: 'monospace',
+          Row(
+            children: [
+              _HeaderIconButton(icon: Icons.arrow_back, onTap: widget.onBack),
+              _MethodBadge(method: e.method ?? '?'),
+              const SizedBox(width: 6),
+              _StatusBadge(kind: e.kind, statusCode: e.statusCode),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  _apiPath(e.url),
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                    fontFamily: 'monospace',
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
+              _HeaderIconButton(
+                icon: Icons.terminal,
+                tooltip: 'Copy as cURL',
+                onTap: () => _copy(_apiCurl(e)),
+              ),
+              // Minimize straight from the detail page — drops back to the app
+              // with this exact API detail preserved, ready to restore.
+              _HeaderIconButton(
+                icon: Icons.remove,
+                tooltip: 'Minimize — keeps your place',
+                onTap: widget.onMinimize,
+              ),
+              // Close — resets the tools so a reopen starts at the log list.
+              _HeaderIconButton(
+                icon: Icons.close,
+                tooltip: 'Close — reset to start',
+                onTap: widget.onClose,
+              ),
+            ],
+          ),
+          // Auto-derived "what's notable" badges — surfaces the slow call, the
+          // server error, the cache hit or the oversized payload without making
+          // the dev read the numbers.
+          if (insights.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(8, 8, 4, 0),
+              child: Wrap(
+                spacing: 6,
+                runSpacing: 6,
+                children: [
+                  for (final i in insights)
+                    _InsightChip(icon: i.icon, label: i.label, color: i.color),
+                ],
+              ),
             ),
-          ),
-          _HeaderIconButton(
-            icon: Icons.terminal,
-            tooltip: 'Copy as cURL',
-            onTap: () => _copy(_apiCurl(e)),
-          ),
-          // Minimize straight from the detail page — drops back to the app with
-          // this exact API detail preserved, ready to restore from the chip.
-          _HeaderIconButton(
-            icon: Icons.remove,
-            tooltip: 'Minimize — keeps your place',
-            onTap: widget.onMinimize,
-          ),
-          // Close — resets the tools so a reopen starts at the log list.
-          _HeaderIconButton(
-            icon: Icons.close,
-            tooltip: 'Close — reset to start',
-            onTap: widget.onClose,
-          ),
         ],
       ),
     );
+  }
+
+  /// Derives at-a-glance health badges from one call: status class, latency
+  /// band, cache hit and payload size. Pure function of the entry.
+  List<_Insight> _insightsFor(DebugLogEntry e) {
+    const red = Color(0xFFE06C75);
+    const amber = Color(0xFFE5C07B);
+    const green = Color(0xFF98C379);
+    const blue = Color(0xFF61AFEF);
+    final out = <_Insight>[];
+
+    final s = e.statusCode;
+    if (e.isInFlight) {
+      out.add(const _Insight(Icons.sync, 'IN FLIGHT', amber));
+    } else if (s == null) {
+      out.add(const _Insight(Icons.error_outline, 'FAILED', red));
+    } else if (s >= 500) {
+      out.add(_Insight(Icons.dns_outlined, 'SERVER $s', red));
+    } else if (s == 401) {
+      out.add(const _Insight(Icons.lock_outline, 'UNAUTHORIZED', amber));
+    } else if (s == 403) {
+      out.add(const _Insight(Icons.block, 'FORBIDDEN', amber));
+    } else if (s == 304) {
+      out.add(const _Insight(Icons.bolt, 'NOT MODIFIED · CACHED', blue));
+    } else if (s >= 400) {
+      out.add(_Insight(Icons.report_gmailerrorred_outlined, 'CLIENT $s', amber));
+    }
+
+    final ms = e.duration?.inMilliseconds;
+    if (ms != null) {
+      if (ms > 1000) {
+        out.add(_Insight(Icons.hourglass_bottom, 'SLOW · ${ms}ms', red));
+      } else if (ms > 500) {
+        out.add(_Insight(Icons.schedule, '${ms}ms', amber));
+      } else {
+        out.add(_Insight(Icons.flash_on, '${ms}ms', green));
+      }
+    }
+
+    final b = e.responseBytes;
+    if (b != null && b > 512 * 1024) {
+      out.add(_Insight(Icons.layers_outlined, 'LARGE · ${_apiBytes(b)}', amber));
+    }
+
+    return out;
   }
 
   // ── Section builders ──
@@ -969,6 +1036,55 @@ class _KvRow extends StatelessWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// One at-a-glance health badge derived from an API call (see `_insightsFor`).
+class _Insight {
+  final IconData icon;
+  final String label;
+  final Color color;
+  const _Insight(this.icon, this.label, this.color);
+}
+
+/// Compact pill rendering an [_Insight] — icon + tinted label.
+class _InsightChip extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final Color color;
+  const _InsightChip({
+    required this.icon,
+    required this.label,
+    required this.color,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.14),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: color.withValues(alpha: 0.5)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 11, color: color),
+          const SizedBox(width: 4),
+          Text(
+            label,
+            style: TextStyle(
+              color: color,
+              fontSize: 9.5,
+              fontWeight: FontWeight.w800,
+              letterSpacing: 0.3,
+              fontFamily: 'monospace',
+            ),
+          ),
+        ],
       ),
     );
   }
