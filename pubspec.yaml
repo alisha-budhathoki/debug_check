@@ -4,7 +4,7 @@ description: >-
   search, log & error console, FPS/jank monitor, layout grid and app-info
   snapshot.
 repository: https://github.com/alisha-budhathoki/debug_check.git
-version: 0.2.2
+version: 0.2.3
 environment:
   sdk: ^3.7.0
   flutter: ">=3.0.0"
@@ -12,7 +12,7 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-  dio: ^5.4.3+1
+  dio: ^5.7.0
 
 dev_dependencies:
   flutter_lints: ^5.0.0

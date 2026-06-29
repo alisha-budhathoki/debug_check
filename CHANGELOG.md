@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.2.3
+
+- Restored the full 20/20 platform-support score by raising the `dio` lower
+  bound to `^5.7.0`. Older `dio` releases pulled a web adapter built on
+  `dart:html`, which is not WASM-compatible; `dio` 5.7.0+ uses `package:web`,
+  so the package is now WASM-ready on the web platform.
+
 ## 0.2.2
 
 - Full 160/160 pub.dev score: shortened the package description to the 60–180
