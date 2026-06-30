@@ -3,12 +3,12 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 
 import '../app_info/app_info_snapshot.dart';
-import '../logging/debug_dio_interceptor.dart';
 import '../grid/debug_grid_overlay.dart';
+import '../logging/debug_dio_interceptor.dart';
 import '../logging/debug_logger.dart';
+import '../navigation/screen_tracker.dart';
 import '../overlay/debug_overlay.dart';
 import '../performance/perf_monitor.dart';
-import '../navigation/screen_tracker.dart';
 
 /// Host-supplied application facts shown in the Info / Report panels. Keeps the
 /// package decoupled from the app: instead of importing the app's config, the
@@ -57,18 +57,26 @@ class DebugAppInfo {
 class DebugTools {
   DebugTools._();
 
-  static bool _enabled = false;
+  static final ValueNotifier<bool> enabledListenable = ValueNotifier<bool>(
+    false,
+  );
+
   static DebugAppInfo appInfo = DebugAppInfo.unknown;
 
   /// Master switch read by every tool. False ⇒ no logging, no overlay, no
   /// perf capture, no work of any kind.
-  static bool get enabled => _enabled;
+  static bool get enabled => enabledListenable.value;
 
   /// Wire up the tools. Safe to call once; repeated calls just refresh config.
   static void init({required bool enabled, DebugAppInfo? appInfo}) {
-    _enabled = enabled;
     if (appInfo != null) DebugTools.appInfo = appInfo;
-    if (!enabled) return;
+    setEnabled(enabled);
+  }
+
+  static void setEnabled(bool value) {
+    if (enabledListenable.value == value) return;
+    enabledListenable.value = value;
+    if (!value) return;
     AppInfoSnapshot.markAppStart();
     PerfMonitor.instance.start();
     _installErrorHandlers();
@@ -118,9 +126,15 @@ class DebugToolsHost extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (!DebugTools.enabled) return child;
-    return Stack(
-      children: [DebugInspectorScope(child: child), const DebugOverlay()],
+    return ValueListenableBuilder<bool>(
+      valueListenable: DebugTools.enabledListenable,
+      child: child,
+      builder: (context, enabled, child) {
+        if (!enabled) return child!;
+        return Stack(
+          children: [DebugInspectorScope(child: child!), const DebugOverlay()],
+        );
+      },
     );
   }
 }

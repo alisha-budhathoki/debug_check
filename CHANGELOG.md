@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.3.0
+
+- The debug tools can now be toggled on/off at runtime. `DebugTools.enabled` is
+  backed by a `ValueNotifier` (`DebugTools.enabledListenable`), and a new
+  `DebugTools.setEnabled(bool)` flips it; `DebugToolsHost` rebuilds reactively,
+  so the overlay appears/disappears without restarting the app.
+
 ## 0.2.3
 
 - Restored the full 20/20 platform-support score by raising the `dio` lower
