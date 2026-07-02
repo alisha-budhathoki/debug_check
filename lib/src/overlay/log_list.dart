@@ -203,6 +203,50 @@ class _DuplicateBadge extends StatelessWidget {
   }
 }
 
+/// Compact red-tinted strip shown under a failed API row so the failure reason
+/// is visible in the list itself, no detail screen required.
+class _ApiErrorLine extends StatelessWidget {
+  final String text;
+  const _ApiErrorLine({required this.text});
+
+  @override
+  Widget build(BuildContext context) {
+    const red = Color(0xFFE06C75);
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+      decoration: BoxDecoration(
+        color: red.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(5),
+        border: Border.all(color: red.withValues(alpha: 0.35)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Padding(
+            padding: EdgeInsets.only(top: 1),
+            child: Icon(Icons.error_outline, color: red, size: 13),
+          ),
+          const SizedBox(width: 6),
+          Expanded(
+            child: Text(
+              text,
+              style: const TextStyle(
+                color: Color(0xFFF2B8BD),
+                fontSize: 11,
+                height: 1.3,
+                fontWeight: FontWeight.w500,
+              ),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _DuplicateWarningBar extends StatelessWidget {
   final int count;
   const _DuplicateWarningBar({required this.count});
@@ -623,10 +667,13 @@ class _LogTileState extends State<_LogTile> {
   Widget _apiHeader(DebugLogEntry e) {
     final host = _hostOf(e.url);
     final path = _pathOf(e.url);
+    final errorLine = _apiErrorLine(e);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Row(
+          // Keep badges + chevron level with the first line when the path wraps.
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             _MethodBadge(method: e.method ?? '?'),
             const SizedBox(width: 6),
@@ -641,8 +688,10 @@ class _LogTileState extends State<_LogTile> {
                   fontWeight: FontWeight.w600,
                   fontFamily: 'monospace',
                 ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
+                // Always show the complete endpoint — wrap across as many lines
+                // as the path needs, never truncate, so it's fully legible in
+                // the list without opening detail.
+                softWrap: true,
               ),
             ),
             if (widget.duplicateCount != null &&
@@ -719,6 +768,10 @@ class _LogTileState extends State<_LogTile> {
             ],
           ],
         ),
+        if (errorLine != null) ...[
+          const SizedBox(height: 6),
+          _ApiErrorLine(text: errorLine),
+        ],
       ],
     );
   }
@@ -946,6 +999,25 @@ class _LogTileState extends State<_LogTile> {
 
   // ─── Helpers ──────────────────────────────────────────────────────────────
 
+  // A one-line, human-readable failure summary for the collapsed API row so a
+  // failed call is legible without opening its detail. Prefers the captured
+  // error message; otherwise synthesises one from the HTTP status. Returns null
+  // for successful / in-flight calls (nothing worth surfacing inline).
+  static String? _apiErrorLine(DebugLogEntry e) {
+    if (e.kind != DebugLogKind.apiError) return null;
+    final msg = e.errorMessage?.trim();
+    if (msg != null && msg.isNotEmpty) {
+      // Collapse to a single line so the row height stays predictable.
+      return msg.replaceAll(RegExp(r'\s+'), ' ');
+    }
+    final code = e.statusCode;
+    if (code != null) {
+      final text = _statusText(code);
+      return text.isEmpty ? 'HTTP $code' : 'HTTP $code · $text';
+    }
+    return 'Request failed';
+  }
+
   static bool _hasRequest(DebugLogEntry e) =>
       (e.queryParameters?.isNotEmpty ?? false) ||
       (e.requestHeaders?.isNotEmpty ?? false) ||
@@ -975,7 +1047,18 @@ class _LogTileState extends State<_LogTile> {
     final u = Uri.tryParse(url);
     if (u == null) return url;
     final path = u.path.isEmpty ? '/' : u.path;
-    return u.query.isEmpty ? path : '$path?${u.query}';
+    if (u.query.isEmpty) return path;
+    // Show a decoded, readable query — turns `filter%5Btype%5D=INDEX` into
+    // `filter[type]=INDEX` so the endpoint is legible at a glance. Falls back to
+    // the raw query if decoding fails.
+    try {
+      final readable = u.queryParameters.entries
+          .map((e) => '${e.key}=${e.value}')
+          .join('&');
+      return '$path?$readable';
+    } catch (_) {
+      return '$path?${u.query}';
+    }
   }
 
   static String _formatBytes(int b) {

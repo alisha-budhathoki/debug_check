@@ -137,6 +137,24 @@ void seedDemoData() {
     responseBytes: 184,
   );
 
+  // Long URL-encoded query — exercises full-path wrapping + query decoding in
+  // the log list (renders as filter[duration]=1D&filter[type]=INDEX&…).
+  log.completeApiSuccess(
+    id: null,
+    method: 'GET',
+    url:
+        '$base/api/v1/market-index'
+        '?filter%5Bduration%5D=1D'
+        '&filter%5Btype%5D=INDEX'
+        '&filter%5Bsymbol%5D=NEPSE',
+    statusCode: 200,
+    duration: const Duration(milliseconds: 2367),
+    requestHeaders: jsonHeaders,
+    responseHeaders: const {'content-type': 'application/json'},
+    responseBody: '{"index":"NEPSE","value":2678.4,"change":12.3}',
+    responseBytes: 106600,
+  );
+
   // Login POST with request + response bodies.
   log.completeApiSuccess(
     id: null,
