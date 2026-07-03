@@ -8,6 +8,8 @@ import 'package:flutter/material.dart';
 /// route observer) and seeds the inspector with realistic sample traffic so the
 /// floating bug chip has something to show the moment it opens.
 void main() {
+  WidgetsFlutterBinding.ensureInitialized();
+
   // 1. One init at startup — gate this on your own dev/staging flag in a real
   //    app. Here it's always on so the overlay is visible in the demo.
   DebugTools.init(

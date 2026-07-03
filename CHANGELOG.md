@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.4.0
+
+- Reworked the inspector header for a clearer visual hierarchy: the tab switcher
+  is now a segmented control sitting directly under the title (the primary
+  control), with a per-tab insight strip and the search box below it as a
+  contextual layer.
+- Added a fixed-height insight strip that summarises the active tab at a glance —
+  request / error / latency / transfer / duplicate totals on the log tabs, app
+  identity on Info, live FPS / jank / worst-frame on Perf, and device geometry
+  on Grid. The header no longer changes height when switching tabs.
+- API rows now show the full request origin (`scheme://host`) with a one-tap
+  copy-URL button, so the complete URL is legible without opening the detail
+  screen.
+- The search box stays mounted on every tab but is disabled on the Info / Perf /
+  Grid panels, where it has nothing to filter.
+- Fixed a crash when `DebugTools.init` ran before the Flutter binding existed
+  (e.g. called at the top of `main` before `runApp`); enabling the tools now
+  ensures the binding first.
+
 ## 0.3.0
 
 - The debug tools can now be toggled on/off at runtime. `DebugTools.enabled` is

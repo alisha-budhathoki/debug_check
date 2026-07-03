@@ -51,7 +51,9 @@ void main() {
   testWidgets('02 api detail + insight chips', (tester) async {
     await boot(tester);
     await openViewer(tester);
-    await tester.tap(find.text('/api/v1/orders/history'));
+    await tester.tap(
+      find.textContaining('orders/history', findRichText: true).first,
+    );
     await tester.pumpAndSettle();
     await shot(tester, '02-api-detail');
   });
@@ -59,7 +61,9 @@ void main() {
   testWidgets('03 search inside response', (tester) async {
     await boot(tester);
     await openViewer(tester);
-    await tester.tap(find.text('/api/v1/portfolio/holdings'));
+    await tester.tap(
+      find.textContaining('portfolio/holdings', findRichText: true).first,
+    );
     await tester.pumpAndSettle();
     await tester.tap(find.text('Response'));
     await tester.pumpAndSettle();

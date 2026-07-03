@@ -99,9 +99,11 @@ class _DebugLogViewerState extends State<_DebugLogViewer> {
               onHide: widget.onHide,
               total: widget.entries.length,
               shown: filtered.length,
+              entries: widget.entries,
+              duplicateRows: dupeRows,
               searchCtrl: _searchCtrl,
               onSearchChanged: (v) => setState(() => _search = v),
-              showSearch: !isPanelTab,
+              searchEnabled: !isPanelTab,
             ),
             if (!isPanelTab && dupeRows > 0)
               _DuplicateWarningBar(count: dupeRows),
@@ -116,9 +118,9 @@ class _DebugLogViewerState extends State<_DebugLogViewer> {
                       : filtered.isEmpty
                       ? const _EmptyState()
                       : ListView.separated(
-                        padding: const EdgeInsets.symmetric(vertical: 6),
+                        padding: const EdgeInsets.symmetric(vertical: 12),
                         itemCount: filtered.length,
-                        separatorBuilder: (_, _) => const SizedBox(height: 4),
+                        separatorBuilder: (_, _) => const SizedBox(height: 10),
                         itemBuilder: (context, i) {
                           final entry = filtered[i];
                           return _LogTile(
@@ -162,6 +164,111 @@ class _EmptyState extends StatelessWidget {
 /// Live rendering-performance read-out for QA: frames/sec, jank %, worst frame
 /// and a frame-time sparkline. Reads [PerfMonitor], which records every frame
 /// from boot, so minimise the tools, exercise a screen, then reopen this tab.
+
+/// The endpoint path, rendered with the leading segments dimmed and the final
+/// segment — the resource the call actually hits — kept bright, so the eye
+/// lands on what matters while the full path stays legible. Wraps freely and
+/// never truncates.
+class _EndpointPath extends StatelessWidget {
+  final String path;
+  const _EndpointPath({required this.path});
+
+  @override
+  Widget build(BuildContext context) {
+    final trimmed =
+        path.length > 1 && path.endsWith('/')
+            ? path.substring(0, path.length - 1)
+            : path;
+    final slash = trimmed.lastIndexOf('/');
+    var lead = slash <= 0 ? '' : trimmed.substring(0, slash + 1);
+    var leaf = slash < 0 ? trimmed : trimmed.substring(slash + 1);
+    if (leaf.isEmpty) {
+      leaf = trimmed;
+      lead = '';
+    }
+
+    return Text.rich(
+      TextSpan(
+        style: const TextStyle(
+          fontSize: 13,
+          fontWeight: FontWeight.w600,
+          fontFamily: 'monospace',
+          height: 1.35,
+        ),
+        children: [
+          if (lead.isNotEmpty)
+            TextSpan(text: lead, style: const TextStyle(color: Colors.white54)),
+          TextSpan(text: leaf, style: const TextStyle(color: Colors.white)),
+        ],
+      ),
+      softWrap: true,
+    );
+  }
+}
+
+/// Query parameters as a wrapping row of decoded key/value pills — far more
+/// scannable than a long `?a=b&c=d` string trailing the path, and it keeps the
+/// path itself clean.
+class _QueryParams extends StatelessWidget {
+  final Map<String, String> params;
+  const _QueryParams({required this.params});
+
+  @override
+  Widget build(BuildContext context) {
+    return Wrap(
+      spacing: 6,
+      runSpacing: 6,
+      children: [
+        for (final e in params.entries) _QueryChip(name: e.key, value: e.value),
+      ],
+    );
+  }
+}
+
+class _QueryChip extends StatelessWidget {
+  final String name;
+  final String value;
+  const _QueryChip({required this.name, required this.value});
+
+  @override
+  Widget build(BuildContext context) {
+    const accent = Color(0xFF61AFEF);
+    return Container(
+      constraints: const BoxConstraints(maxWidth: 220),
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1B2530),
+        borderRadius: BorderRadius.circular(5),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.07)),
+      ),
+      child: Text.rich(
+        TextSpan(
+          style: const TextStyle(
+            fontSize: 10.5,
+            fontFamily: 'monospace',
+            height: 1.1,
+          ),
+          children: [
+            TextSpan(text: name, style: const TextStyle(color: Colors.white54)),
+            const TextSpan(
+              text: ' = ',
+              style: TextStyle(color: Colors.white24),
+            ),
+            TextSpan(
+              text: value,
+              style: const TextStyle(
+                color: accent,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
+        ),
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+      ),
+    );
+  }
+}
 
 class _DuplicateBadge extends StatelessWidget {
   final int count;
@@ -348,9 +455,15 @@ class _ViewerHeader extends StatelessWidget {
   final VoidCallback onHide;
   final int total;
   final int shown;
+  final List<DebugLogEntry> entries;
+  final int duplicateRows;
   final TextEditingController searchCtrl;
   final ValueChanged<String> onSearchChanged;
-  final bool showSearch;
+
+  /// The search box only filters the log list, so on the panel tabs (Info /
+  /// Perf / Grid) it is shown but disabled — present to keep the header a fixed
+  /// height, inert so it plainly has no effect there.
+  final bool searchEnabled;
 
   const _ViewerHeader({
     required this.filter,
@@ -361,9 +474,11 @@ class _ViewerHeader extends StatelessWidget {
     required this.onHide,
     required this.total,
     required this.shown,
+    required this.entries,
+    required this.duplicateRows,
     required this.searchCtrl,
     required this.onSearchChanged,
-    this.showSearch = true,
+    this.searchEnabled = true,
   });
 
   @override
@@ -431,52 +546,28 @@ class _ViewerHeader extends StatelessWidget {
               ),
             ],
           ),
-          if (showSearch) ...[
-            const SizedBox(height: 8),
-            _SearchField(controller: searchCtrl, onChanged: onSearchChanged),
-          ],
+          // Primary navigation. Sits directly under the title so it reads as
+          // the main control of the panel; everything below it is context for
+          // whichever tab it selects. A segmented control (not loose chips)
+          // gives the tabs the visual weight of a real switcher.
+          const SizedBox(height: 12),
+          _TabBar(filter: filter, onFilterChange: onFilterChange),
+          // Context layer for the active tab — visually lighter than the tabs
+          // above it. A fixed-height insight strip (so switching tabs never
+          // resizes the header) with at-a-glance metrics, then the search box.
+          const SizedBox(height: 12),
+          _InsightStrip(
+            filter: filter,
+            entries: entries,
+            duplicateRows: duplicateRows,
+          ),
+          // Search stays mounted on every tab (fixed height) but is disabled on
+          // the panel tabs, where it has nothing to filter — inert, not hidden.
           const SizedBox(height: 8),
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: Row(
-              children: [
-                _FilterChip(
-                  label: 'All',
-                  selected: filter == 'all',
-                  onTap: () => onFilterChange('all'),
-                ),
-                const SizedBox(width: 6),
-                _FilterChip(
-                  label: 'API',
-                  selected: filter == 'api',
-                  onTap: () => onFilterChange('api'),
-                ),
-                const SizedBox(width: 6),
-                _FilterChip(
-                  label: 'Errors',
-                  selected: filter == 'errors',
-                  onTap: () => onFilterChange('errors'),
-                ),
-                const SizedBox(width: 6),
-                _FilterChip(
-                  label: 'Info',
-                  selected: filter == 'info',
-                  onTap: () => onFilterChange('info'),
-                ),
-                const SizedBox(width: 6),
-                _FilterChip(
-                  label: 'Perf',
-                  selected: filter == 'perf',
-                  onTap: () => onFilterChange('perf'),
-                ),
-                const SizedBox(width: 6),
-                _FilterChip(
-                  label: 'Grid',
-                  selected: filter == 'grid',
-                  onTap: () => onFilterChange('grid'),
-                ),
-              ],
-            ),
+          _SearchField(
+            controller: searchCtrl,
+            onChanged: onSearchChanged,
+            enabled: searchEnabled,
           ),
         ],
       ),
@@ -487,29 +578,54 @@ class _ViewerHeader extends StatelessWidget {
 class _SearchField extends StatelessWidget {
   final TextEditingController controller;
   final ValueChanged<String> onChanged;
-  const _SearchField({required this.controller, required this.onChanged});
+  final bool enabled;
+  const _SearchField({
+    required this.controller,
+    required this.onChanged,
+    this.enabled = true,
+  });
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        color: const Color(0xFF0E1116),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: Colors.white12),
-      ),
-      child: TextField(
-        controller: controller,
-        onChanged: onChanged,
-        style: const TextStyle(color: Colors.white, fontSize: 13),
-        cursorColor: Colors.white70,
-        decoration: const InputDecoration(
-          isDense: true,
-          contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 10),
-          border: InputBorder.none,
-          hintText: 'Search URL, error, title…',
-          hintStyle: TextStyle(color: Colors.white38, fontSize: 13),
-          prefixIcon: Icon(Icons.search, color: Colors.white38, size: 18),
-          prefixIconConstraints: BoxConstraints(minWidth: 32, minHeight: 0),
+    // Disabled on panel tabs: dimmed and non-interactive so it reads as "not
+    // applicable here" rather than a search box that silently does nothing.
+    return Opacity(
+      opacity: enabled ? 1 : 0.45,
+      child: Container(
+        decoration: BoxDecoration(
+          color: const Color(0xFF0E1116),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: Colors.white12),
+        ),
+        child: TextField(
+          controller: controller,
+          onChanged: onChanged,
+          enabled: enabled,
+          style: const TextStyle(color: Colors.white, fontSize: 13),
+          cursorColor: Colors.white70,
+          decoration: InputDecoration(
+            isDense: true,
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 10,
+              vertical: 10,
+            ),
+            border: InputBorder.none,
+            disabledBorder: InputBorder.none,
+            hintText:
+                enabled
+                    ? 'Search URL, error, title…'
+                    : 'Search applies to logs',
+            hintStyle: const TextStyle(color: Colors.white38, fontSize: 13),
+            prefixIcon: const Icon(
+              Icons.search,
+              color: Colors.white38,
+              size: 18,
+            ),
+            prefixIconConstraints: const BoxConstraints(
+              minWidth: 32,
+              minHeight: 0,
+            ),
+          ),
         ),
       ),
     );
@@ -543,11 +659,369 @@ class _HeaderIconButton extends StatelessWidget {
   }
 }
 
-class _FilterChip extends StatelessWidget {
+/// A compact, unobtrusive copy affordance for inline use in a log row — e.g.
+/// lifting the full request URL straight from the list without opening detail.
+class _InlineCopyButton extends StatelessWidget {
+  final VoidCallback onTap;
+  final String tooltip;
+  const _InlineCopyButton({required this.onTap, required this.tooltip});
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: tooltip,
+      child: InkResponse(
+        onTap: onTap,
+        radius: 18,
+        child: const Padding(
+          padding: EdgeInsets.all(3),
+          child: Icon(Icons.copy_rounded, size: 13, color: Colors.white38),
+        ),
+      ),
+    );
+  }
+}
+
+/// A single glanceable metric: a coloured icon + value with a dim trailing
+/// label, e.g. `⏱ 512ms avg`. The value carries the colour (so a bad number
+/// reads as red at a glance); the label stays quiet so the strip scans fast.
+class _InsightPill extends StatelessWidget {
+  final IconData icon;
+  final String value;
+  final String label;
+  final Color color;
+  const _InsightPill({
+    required this.icon,
+    required this.value,
+    required this.label,
+    this.color = const Color(0xFF61AFEF),
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.10),
+        borderRadius: BorderRadius.circular(7),
+        border: Border.all(color: color.withValues(alpha: 0.28)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 12, color: color),
+          const SizedBox(width: 5),
+          Text(
+            value,
+            style: TextStyle(
+              color: color,
+              fontSize: 11.5,
+              fontWeight: FontWeight.w700,
+              fontFeatures: const [FontFeature.tabularFigures()],
+            ),
+          ),
+          const SizedBox(width: 4),
+          Text(
+            label,
+            style: const TextStyle(
+              color: Colors.white38,
+              fontSize: 10.5,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// A fixed-height, horizontally-scrolling band of [_InsightPill]s that gives
+/// each tab an at-a-glance summary of what it contains. Present (and the same
+/// height) on every tab, it is what keeps the header a fixed height while still
+/// turning that space into something useful:
+///
+///  • log tabs → traffic totals (requests, errors, avg latency, data, dupes)
+///  • Info     → app identity (version, environment, host, channel)
+///  • Perf     → live FPS / jank / worst-frame, refreshed as frames land
+///  • Grid     → device geometry (logical size, DPR, text scale)
+class _InsightStrip extends StatelessWidget {
+  final String filter;
+  final List<DebugLogEntry> entries;
+  final int duplicateRows;
+  const _InsightStrip({
+    required this.filter,
+    required this.entries,
+    required this.duplicateRows,
+  });
+
+  static const _blue = Color(0xFF61AFEF);
+  static const _green = Color(0xFF98C379);
+  static const _amber = Color(0xFFE5C07B);
+  static const _red = Color(0xFFE06C75);
+  static const _cyan = Color(0xFF56B6C2);
+  static const _violet = Color(0xFFC678DD);
+  static const _idle = Colors.white38;
+
+  @override
+  Widget build(BuildContext context) {
+    // Perf is the one tab whose numbers change continuously, so it rebuilds off
+    // the live stats notifier; every other tab is derived from data in hand.
+    if (filter == 'perf') {
+      return ValueListenableBuilder<PerfStats>(
+        valueListenable: PerfMonitor.instance.stats,
+        builder: (_, stats, _) => _band(_perfPills(stats)),
+      );
+    }
+    switch (filter) {
+      case 'info':
+        return _band(_infoPills());
+      case 'grid':
+        return _band(_gridPills(context));
+      default:
+        return _band(_logPills());
+    }
+  }
+
+  Widget _band(List<Widget> pills) {
+    return SizedBox(
+      height: 30,
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        physics: const BouncingScrollPhysics(),
+        itemCount: pills.length,
+        separatorBuilder: (_, _) => const SizedBox(width: 6),
+        itemBuilder: (_, i) => Center(child: pills[i]),
+      ),
+    );
+  }
+
+  // ─── Per-tab pills ─────────────────────────────────────────────────────────
+
+  List<Widget> _logPills() {
+    final api = entries.where((e) => e.isApi).toList(growable: false);
+    final errors = entries.where((e) => e.isError).length;
+    final latencies = api
+        .where((e) => e.duration != null)
+        .map((e) => e.duration!.inMilliseconds)
+        .toList(growable: false);
+    final avg =
+        latencies.isEmpty
+            ? null
+            : latencies.reduce((a, b) => a + b) ~/ latencies.length;
+    final bytes = api.fold<int>(0, (s, e) => s + (e.responseBytes ?? 0));
+
+    return [
+      _InsightPill(
+        icon: Icons.swap_vert_rounded,
+        value: '${api.length}',
+        label: api.length == 1 ? 'request' : 'requests',
+        color: _blue,
+      ),
+      _InsightPill(
+        icon: errors > 0 ? Icons.error_outline : Icons.check_circle_outline,
+        value: '$errors',
+        label: errors == 1 ? 'error' : 'errors',
+        color: errors > 0 ? _red : _green,
+      ),
+      if (avg != null)
+        _InsightPill(
+          icon: Icons.timer_outlined,
+          value: '${avg}ms',
+          label: 'avg',
+          color: _latencyColor(avg),
+        ),
+      if (bytes > 0)
+        _InsightPill(
+          icon: Icons.download_outlined,
+          value: _formatBytes(bytes),
+          label: 'transferred',
+          color: _cyan,
+        ),
+      if (duplicateRows > 0)
+        _InsightPill(
+          icon: Icons.copy_all_outlined,
+          value: '$duplicateRows',
+          label: duplicateRows == 1 ? 'duplicate' : 'duplicates',
+          color: _amber,
+        ),
+    ];
+  }
+
+  List<Widget> _infoPills() {
+    final info = DebugTools.appInfo;
+    String? clean(String v) => (v.isEmpty || v == '-') ? null : v;
+    final version = clean(info.version);
+    final env = clean(info.environmentName);
+    final host = clean(Uri.tryParse(info.baseUrl)?.host ?? '');
+
+    return [
+      if (version != null)
+        _InsightPill(
+          icon: Icons.tag,
+          value: version,
+          label: 'version',
+          color: _blue,
+        ),
+      if (env != null)
+        _InsightPill(
+          icon: Icons.dns_outlined,
+          value: env,
+          label: 'env',
+          color: _violet,
+        ),
+      if (host != null)
+        _InsightPill(
+          icon: Icons.public,
+          value: host,
+          label: 'host',
+          color: _cyan,
+        ),
+      _InsightPill(
+        icon: info.isNativeCall ? Icons.phonelink : Icons.language,
+        value: info.isNativeCall ? 'native' : 'http',
+        label: 'channel',
+        color: _green,
+      ),
+    ];
+  }
+
+  List<Widget> _gridPills(BuildContext context) {
+    final mq = MediaQuery.of(context);
+    final size = mq.size;
+    return [
+      _InsightPill(
+        icon: Icons.aspect_ratio,
+        value: '${size.width.round()}×${size.height.round()}',
+        label: 'logical',
+        color: _blue,
+      ),
+      _InsightPill(
+        icon: Icons.grain,
+        value: '${mq.devicePixelRatio.toStringAsFixed(1)}×',
+        label: 'dpr',
+        color: _cyan,
+      ),
+      _InsightPill(
+        icon: Icons.format_size,
+        value: '${mq.textScaler.scale(1).toStringAsFixed(2)}×',
+        label: 'text scale',
+        color: _violet,
+      ),
+    ];
+  }
+
+  List<Widget> _perfPills(PerfStats stats) {
+    final rendering = stats.sampleCount > 0 && stats.fps > 0;
+    final jankPct = stats.jankRatio * 100;
+    return [
+      _InsightPill(
+        icon: Icons.speed,
+        value: rendering ? stats.fps.toStringAsFixed(0) : 'idle',
+        label: 'fps',
+        color:
+            !rendering
+                ? _idle
+                : stats.fps >= 55
+                ? _green
+                : stats.fps >= 40
+                ? _amber
+                : _red,
+      ),
+      _InsightPill(
+        icon: Icons.stacked_line_chart,
+        value: '${jankPct.toStringAsFixed(0)}%',
+        label: 'jank',
+        color:
+            stats.jankRatio <= 0.05
+                ? _green
+                : stats.jankRatio <= 0.15
+                ? _amber
+                : _red,
+      ),
+      _InsightPill(
+        icon: Icons.warning_amber_rounded,
+        value: '${stats.worstTotalMs.toStringAsFixed(0)}ms',
+        label: 'worst',
+        color:
+            stats.worstTotalMs <= 16.7
+                ? _green
+                : stats.worstTotalMs <= 33
+                ? _amber
+                : _red,
+      ),
+    ];
+  }
+
+  // ─── Local formatting (mirrors the row helpers; kept self-contained) ────────
+
+  static Color _latencyColor(int ms) {
+    if (ms <= 300) return _green;
+    if (ms <= 1000) return _amber;
+    return _red;
+  }
+
+  static String _formatBytes(int b) {
+    if (b < 1024) return '${b}B';
+    if (b < 1024 * 1024) return '${(b / 1024).toStringAsFixed(1)}KB';
+    return '${(b / 1024 / 1024).toStringAsFixed(2)}MB';
+  }
+}
+
+/// The primary tab switcher, styled as an iOS-style segmented control: an
+/// inset track holding equal-width segments, with a raised thumb marking the
+/// selected tab. This reads as one deliberate navigation control — giving the
+/// tabs clear visual weight — rather than a scattered row of chips that gets
+/// lost under the rest of the header.
+class _TabBar extends StatelessWidget {
+  final String filter;
+  final ValueChanged<String> onFilterChange;
+  const _TabBar({required this.filter, required this.onFilterChange});
+
+  // (id, label). Log filters first, then the tool panels.
+  static const _tabs = <(String, String)>[
+    ('all', 'All'),
+    ('api', 'API'),
+    ('errors', 'Errors'),
+    ('info', 'Info'),
+    ('perf', 'Perf'),
+    ('grid', 'Grid'),
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: 40,
+      padding: const EdgeInsets.all(3),
+      decoration: BoxDecoration(
+        color: const Color(0xFF0B0E13),
+        borderRadius: BorderRadius.circular(11),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          for (final t in _tabs)
+            Expanded(
+              child: _TabSegment(
+                label: t.$2,
+                selected: filter == t.$1,
+                onTap: () {
+                  HapticFeedback.selectionClick();
+                  onFilterChange(t.$1);
+                },
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _TabSegment extends StatelessWidget {
   final String label;
   final bool selected;
   final VoidCallback onTap;
-  const _FilterChip({
+  const _TabSegment({
     required this.label,
     required this.selected,
     required this.onTap,
@@ -555,23 +1029,37 @@ class _FilterChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return InkWell(
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
       onTap: onTap,
-      borderRadius: BorderRadius.circular(14),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 160),
+        curve: Curves.easeOut,
+        alignment: Alignment.center,
         decoration: BoxDecoration(
-          color: selected ? Colors.white : Colors.transparent,
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: selected ? Colors.white : Colors.white24),
+          color: selected ? const Color(0xFF2D333B) : Colors.transparent,
+          borderRadius: BorderRadius.circular(8),
+          boxShadow:
+              selected
+                  ? [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.28),
+                      blurRadius: 4,
+                      offset: const Offset(0, 1),
+                    ),
+                  ]
+                  : null,
         ),
         child: Text(
           label,
+          maxLines: 1,
+          softWrap: false,
+          overflow: TextOverflow.fade,
           style: TextStyle(
-            color: selected ? Colors.black : Colors.white70,
-            fontSize: 11,
-            fontWeight: FontWeight.w700,
-            letterSpacing: 0.3,
+            color: selected ? Colors.white : Colors.white54,
+            fontSize: 11.5,
+            fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+            letterSpacing: 0.2,
           ),
         ),
       ),
@@ -665,8 +1153,9 @@ class _LogTileState extends State<_LogTile> {
   // ─── Collapsed headers ─────────────────────────────────────────────────────
 
   Widget _apiHeader(DebugLogEntry e) {
-    final host = _hostOf(e.url);
+    final origin = _originOf(e.url);
     final path = _pathOf(e.url);
+    final query = _queryOf(e.url);
     final errorLine = _apiErrorLine(e);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -679,21 +1168,7 @@ class _LogTileState extends State<_LogTile> {
             const SizedBox(width: 6),
             _StatusBadge(kind: e.kind, statusCode: e.statusCode),
             const SizedBox(width: 8),
-            Expanded(
-              child: Text(
-                path,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
-                  fontFamily: 'monospace',
-                ),
-                // Always show the complete endpoint — wrap across as many lines
-                // as the path needs, never truncate, so it's fully legible in
-                // the list without opening detail.
-                softWrap: true,
-              ),
-            ),
+            Expanded(child: _EndpointPath(path: path)),
             if (widget.duplicateCount != null &&
                 widget.duplicateCount! > 1) ...[
               const SizedBox(width: 6),
@@ -703,7 +1178,48 @@ class _LogTileState extends State<_LogTile> {
             const Icon(Icons.chevron_right, color: Colors.white38, size: 18),
           ],
         ),
-        const SizedBox(height: 4),
+        // Query parameters get their own decoded chip row so a long query
+        // string reads as a legible key/value set instead of a wrapped,
+        // percent-encoded blob trailing the path.
+        if (query.isNotEmpty) ...[
+          const SizedBox(height: 8),
+          _QueryParams(params: query),
+        ],
+        // The origin (scheme://host) on its own full-width line so the complete
+        // URL reads end to end — origin here, path above, query as chips —
+        // without truncation. The copy button lifts the exact full URL string,
+        // the way a network inspector's row does.
+        if (origin.isNotEmpty) ...[
+          const SizedBox(height: 7),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Padding(
+                padding: EdgeInsets.only(top: 1.5),
+                child: Icon(Icons.public, size: 11, color: Colors.white30),
+              ),
+              const SizedBox(width: 5),
+              Expanded(
+                child: Text(
+                  origin,
+                  style: const TextStyle(
+                    color: Colors.white54,
+                    fontSize: 11,
+                    fontFamily: 'monospace',
+                    height: 1.3,
+                  ),
+                  softWrap: true,
+                ),
+              ),
+              if (e.url != null)
+                _InlineCopyButton(
+                  tooltip: 'Copy full URL',
+                  onTap: () => _copy(e.url!),
+                ),
+            ],
+          ),
+        ],
+        const SizedBox(height: 6),
         Row(
           children: [
             Text(
@@ -712,18 +1228,6 @@ class _LogTileState extends State<_LogTile> {
                 color: Colors.white38,
                 fontSize: 10,
                 fontFamily: 'monospace',
-              ),
-            ),
-            const Text(
-              '  ·  ',
-              style: TextStyle(color: Colors.white24, fontSize: 10),
-            ),
-            Flexible(
-              child: Text(
-                host,
-                style: const TextStyle(color: Colors.white60, fontSize: 11),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
               ),
             ),
             const Spacer(),
@@ -1042,22 +1546,37 @@ class _LogTileState extends State<_LogTile> {
         : '${u.host}:${u.port}';
   }
 
+  // scheme://host[:port] — the URL's origin, shown in full so the complete
+  // request URL is legible from the row. Falls back to the raw string for
+  // relative or unparseable URLs.
+  static String _originOf(String? url) {
+    if (url == null) return '';
+    final u = Uri.tryParse(url);
+    if (u == null || u.host.isEmpty) return _hostOf(url);
+    final scheme = u.scheme.isEmpty ? '' : '${u.scheme}://';
+    return '$scheme${_hostOf(url)}';
+  }
+
+  // The endpoint path on its own — query is surfaced separately as chips so the
+  // path stays the row's clean, scannable identity.
   static String _pathOf(String? url) {
     if (url == null) return '-';
     final u = Uri.tryParse(url);
     if (u == null) return url;
-    final path = u.path.isEmpty ? '/' : u.path;
-    if (u.query.isEmpty) return path;
-    // Show a decoded, readable query — turns `filter%5Btype%5D=INDEX` into
-    // `filter[type]=INDEX` so the endpoint is legible at a glance. Falls back to
-    // the raw query if decoding fails.
+    return u.path.isEmpty ? '/' : u.path;
+  }
+
+  // Decoded query parameters, ready to render as chips. `Uri.queryParameters`
+  // already percent-decodes, turning `filter%5Btype%5D=INDEX` into the readable
+  // `filter[type] = INDEX`. Empty map when there's no query or it won't parse.
+  static Map<String, String> _queryOf(String? url) {
+    if (url == null) return const {};
+    final u = Uri.tryParse(url);
+    if (u == null || u.query.isEmpty) return const {};
     try {
-      final readable = u.queryParameters.entries
-          .map((e) => '${e.key}=${e.value}')
-          .join('&');
-      return '$path?$readable';
+      return u.queryParameters;
     } catch (_) {
-      return '$path?${u.query}';
+      return const {};
     }
   }
 

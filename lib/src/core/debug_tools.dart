@@ -77,6 +77,12 @@ class DebugTools {
     if (enabledListenable.value == value) return;
     enabledListenable.value = value;
     if (!value) return;
+    // Enabling wires up tools that touch a binding (perf frame callbacks, error
+    // handlers). Consumers naturally call init() at the top of main() — before
+    // runApp() — so the binding may not exist yet. ensureInitialized() is
+    // idempotent, so this makes init() safe from any point without forcing the
+    // consumer to remember the ordering.
+    WidgetsFlutterBinding.ensureInitialized();
     AppInfoSnapshot.markAppStart();
     PerfMonitor.instance.start();
     _installErrorHandlers();
