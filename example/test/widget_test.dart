@@ -42,5 +42,10 @@ void main() {
     // Seeded traffic includes a 500 + a platform error, so at least one
     // critical finding must surface.
     expect(find.byIcon(Icons.error_outline), findsWidgets);
+
+    // Findings prescribe rather than restate metrics: the seeded 500 is
+    // diagnosed as a server-side failure, not echoed as a "500" count.
+    expect(find.text('Failures are server-side, not in the app'),
+        findsOneWidget);
   });
 }

@@ -137,8 +137,32 @@ class AppAutopsy {
     final overall = weightUsed == 0 ? 100 : (weightedSum / weightUsed).round();
     final grade = AutopsyGrade.fromScore(overall);
 
-    // Sort worst-first, but keep stable ordering within a severity band so the
-    // most-penalizing subsystem findings (added first) stay on top.
+    // Weakest measured subsystem — where the health actually leaked. Drives the
+    // headline so the verdict points somewhere instead of restating a number.
+    final measured =
+        [network, rendering, stability].where((s) => s.hasData).toList();
+    final weakest = measured.isEmpty
+        ? null
+        : measured.reduce((a, b) => a.score <= b.score ? a : b);
+
+    // Each finder only emits *problems* (a diagnosis + a fix) — never a "looks
+    // fine" line, since the subsystem bars already show green. When nothing is
+    // wrong, one honest verdict says so rather than three redundant all-clears.
+    if (findings.isEmpty) {
+      final scope = measured.map((s) => s.name.toLowerCase()).join(', ');
+      findings.add(AutopsyFinding(
+        severity: AutopsySeverity.good,
+        subsystem: 'Overall',
+        title: 'Nothing to fix',
+        detail: scope.isEmpty
+            ? 'No traffic, frames or errors captured yet — exercise the app, '
+                'then reopen.'
+            : 'Clean across $scope this session.',
+      ));
+    }
+
+    // Worst-first. Within a band, insertion order holds, so the most-penalizing
+    // finding (added first by each finder) reads as the biggest lever.
     findings.sort((a, b) => a.severity.index.compareTo(b.severity.index));
 
     final api = entries.where((e) => e.isApi).toList(growable: false);
@@ -152,7 +176,7 @@ class AppAutopsy {
       rendering: rendering,
       stability: stability,
       findings: findings,
-      headline: _headline(grade, findings),
+      headline: _headline(grade, findings, weakest),
       apiTotal: api.length,
       apiErrors: errors,
       slowestMs: slowest?.duration?.inMilliseconds ?? 0,
@@ -209,69 +233,72 @@ class AppAutopsy {
     if (avg > 800) score -= 8;
     final clamped = score.clamp(0, 100).round();
 
-    // Findings — worst offenders first, then reassurance when clean.
-    if (server5xx.isNotEmpty) {
-      out.add(AutopsyFinding(
-        severity: AutopsySeverity.critical,
-        subsystem: 'Network',
-        title: '${server5xx.length} server error'
-            '${server5xx.length == 1 ? '' : 's'} (5xx)',
-        detail: server5xx.map(_label).toSet().take(3).join(', '),
-      ));
-    }
+    // One failure finding, framed by the *dominant* cause — so a wall of
+    // failures reads as a single diagnosis ("it's the server" / "it's auth"),
+    // not a restated error count you can already see in the API stats.
     if (errors.isNotEmpty) {
+      // Lead with the most-severe cause present: a 5xx ("not your fault,
+      // escalate") outranks an auth lockout, which outranks generic failures.
+      final String title, detail;
+      if (server5xx.isNotEmpty) {
+        final where = server5xx.map(_label).toSet().take(2).join(', ');
+        title = 'Failures are server-side, not in the app';
+        detail = '${server5xx.length} response(s) came back 5xx ($where). '
+            'The client is doing its job — escalate to the backend instead of '
+            'chasing it in the app.';
+      } else if (auth.isNotEmpty) {
+        final where = auth.map(_label).toSet().take(2).join(', ');
+        title = 'The app is being locked out (401/403)';
+        detail = 'Requests are rejected before they run ($where). Usually an '
+            'expired or missing token — check the auth refresh, not the screen.';
+      } else {
+        final where = errors.map(_label).toSet().take(2).join(', ');
+        title = 'Requests are failing';
+        detail = '${errors.length} of ${completed.length} calls failed ($where). '
+            'Open the failing rows for the exact status and body.';
+      }
       out.add(AutopsyFinding(
-        severity: errorRate > 0.25
+        // A 5xx is a hard failure worth surfacing loudly even if it's rare;
+        // otherwise severity scales with how much of the traffic is failing.
+        severity: server5xx.isNotEmpty || errorRate > 0.25
             ? AutopsySeverity.critical
             : AutopsySeverity.warning,
         subsystem: 'Network',
-        title: '${errors.length} of ${completed.length} requests failed '
-            '(${(errorRate * 100).toStringAsFixed(0)}%)',
-        detail: errors.map(_label).toSet().take(3).join(', '),
-      ));
-    }
-    if (auth.isNotEmpty) {
-      out.add(AutopsyFinding(
-        severity: AutopsySeverity.warning,
-        subsystem: 'Network',
-        title: '${auth.length} auth rejection'
-            '${auth.length == 1 ? '' : 's'} (401/403)',
-        detail: 'Token/permission problem: ${auth.map(_label).toSet().take(2).join(', ')}',
+        title: title,
+        detail: detail,
       ));
     }
     if (slow.isNotEmpty) {
       final worst = _slowest(slow)!;
       out.add(AutopsyFinding(
-        severity: slow.length > 2 ? AutopsySeverity.warning : AutopsySeverity.info,
+        severity:
+            slow.length > 2 ? AutopsySeverity.warning : AutopsySeverity.info,
         subsystem: 'Network',
-        title: '${slow.length} slow call'
-            '${slow.length == 1 ? '' : 's'} over 1s',
-        detail: 'Worst ${worst.duration!.inMilliseconds}ms · ${_label(worst)}',
+        title: 'A few calls dominate the wait',
+        detail: '${_label(worst)} alone took '
+            '${(worst.duration!.inMilliseconds / 1000).toStringAsFixed(1)}s. '
+            'Cache it, paginate, or move it off the screen\'s critical path so '
+            'the UI isn\'t blocked on it.',
       ));
     }
     if (dupeRows > 0) {
-      out.add(AutopsyFinding(
+      out.add(const AutopsyFinding(
         severity: AutopsySeverity.warning,
         subsystem: 'Network',
-        title: '$dupeRows duplicate request${dupeRows == 1 ? '' : 's'}',
-        detail: 'Identical calls within 5s — likely a double-tap or rebuild loop',
+        title: 'The same request is firing more than once',
+        detail: 'Identical calls landed within 5s of each other — a double-tap '
+            'or a rebuild loop. Debounce the trigger or guard the in-flight '
+            'request so it can\'t fire twice.',
       ));
     }
     if (huge.isNotEmpty) {
       out.add(AutopsyFinding(
         severity: AutopsySeverity.info,
         subsystem: 'Network',
-        title: '${huge.length} oversized payload'
-            '${huge.length == 1 ? '' : 's'} (>512KB)',
-        detail: 'Consider pagination/compression: ${huge.map(_label).toSet().take(2).join(', ')}',
-      ));
-    }
-    if (errors.isEmpty && slow.isEmpty && dupeRows == 0) {
-      out.add(AutopsyFinding(
-        severity: AutopsySeverity.good,
-        subsystem: 'Network',
-        title: 'Network clean',
-        detail: '${completed.length} requests, no failures, avg ${avg}ms',
+        title: 'Some responses are heavy for mobile',
+        detail: 'Over 512KB on ${huge.map(_label).toSet().take(2).join(', ')}. '
+            'Paginate or ask the API for gzip / a slimmer shape to cut parse '
+            'time and data cost.',
       ));
     }
 
@@ -298,40 +325,38 @@ class AppAutopsy {
     if (perf.worstTotalMs > 100) score -= 10;
     final clamped = score.clamp(0, 100).round();
 
+    // The Perf tab already shows the numbers; here we name the cause and the
+    // fix. The bottleneck thread points at *which kind* of work to move.
+    final onUi = perf.bottleneck.startsWith('UI');
+    final fix = onUi
+        ? 'The UI thread is the bottleneck — move heavy build/layout work '
+            '(JSON parsing, big lists, sync I/O) off the main isolate or into '
+            'const/cached widgets.'
+        : 'The raster thread is the bottleneck — simplify painting: fewer '
+            'opacity/clip/shadow layers and RepaintBoundary around the busy '
+            'part.';
     if (perf.stallCount > 0) {
       out.add(AutopsyFinding(
         severity: AutopsySeverity.critical,
         subsystem: 'Rendering',
-        title: '${perf.stallCount} stall'
-            '${perf.stallCount == 1 ? '' : 's'} over 100ms',
-        detail: 'Worst frame ${perf.worstTotalMs.toStringAsFixed(0)}ms · '
-            'bottleneck ${perf.bottleneck}',
+        title: 'The UI visibly froze',
+        detail: 'A frame took ${perf.worstTotalMs.toStringAsFixed(0)}ms — long '
+            'enough to feel like a hang. $fix',
       ));
     } else if (perf.jankRatio > 0.20) {
       out.add(AutopsyFinding(
         severity: AutopsySeverity.warning,
         subsystem: 'Rendering',
-        title: '${(perf.jankRatio * 100).toStringAsFixed(0)}% of frames dropped',
-        detail: 'UI ${perf.uiJankCount} · raster ${perf.rasterJankCount} · '
-            'bottleneck ${perf.bottleneck}',
+        title: 'Scrolling stutters under load',
+        detail: 'Roughly one frame in five is missing its budget. $fix',
       ));
     } else if (perf.jankRatio > 0.05) {
-      out.add(AutopsyFinding(
+      out.add(const AutopsyFinding(
         severity: AutopsySeverity.info,
         subsystem: 'Rendering',
-        title: 'Occasional jank '
-            '(${(perf.jankRatio * 100).toStringAsFixed(0)}% of frames)',
-        detail: 'Mostly smooth; worst frame '
-            '${perf.worstTotalMs.toStringAsFixed(0)}ms',
-      ));
-    } else {
-      out.add(AutopsyFinding(
-        severity: AutopsySeverity.good,
-        subsystem: 'Rendering',
-        title: 'Rendering smooth',
-        detail: '${perf.sampleCount} frames, '
-            '${(perf.jankRatio * 100).toStringAsFixed(0)}% dropped'
-            '${perf.isIdle ? '' : ', ${perf.fps.toStringAsFixed(0)} fps'}',
+        title: 'A little jank creeps in',
+        detail: 'Mostly smooth, with the odd dropped frame. Worth a glance at '
+            'the Perf sparkline if a specific screen feels rough.',
       ));
     }
 
@@ -355,28 +380,24 @@ class AppAutopsy {
         .toSet();
 
     if (crashes.isEmpty) {
-      out.add(const AutopsyFinding(
-        severity: AutopsySeverity.good,
-        subsystem: 'Stability',
-        title: 'No uncaught errors',
-        detail: 'No Flutter or platform exceptions captured this session',
-      ));
-      return const SubsystemHealth(
-        name: 'Stability',
-        score: 100,
-        hasData: true,
-      );
+      // No finding — a clean run is carried by the green Stability bar, not a
+      // redundant "all good" line.
+      return const SubsystemHealth(name: 'Stability', score: 100, hasData: true);
     }
 
     final score = (100 - crashes.length * 12).clamp(0, 100);
+    final one = uniqueKinds.length == 1;
     out.add(AutopsyFinding(
-      severity:
-          crashes.length > 2 ? AutopsySeverity.critical : AutopsySeverity.warning,
+      severity: crashes.length > 2
+          ? AutopsySeverity.critical
+          : AutopsySeverity.warning,
       subsystem: 'Stability',
-      title: '${crashes.length} uncaught error'
-          '${crashes.length == 1 ? '' : 's'} '
-          '(${uniqueKinds.length} distinct)',
-      detail: uniqueKinds.take(2).join(' · '),
+      title: one
+          ? 'An exception is escaping unhandled'
+          : '${uniqueKinds.length} distinct exceptions escaped unhandled',
+      detail: 'Something threw where nothing caught it — users hit a broken '
+          'state, not a handled error. Wrap the risky path in try/catch or an '
+          'error boundary; the stack is in the Errors tab.',
     ));
     return SubsystemHealth(name: 'Stability', score: score, hasData: true);
   }
@@ -405,20 +426,29 @@ class AppAutopsy {
     return '$method $path';
   }
 
-  static String _headline(AutopsyGrade grade, List<AutopsyFinding> findings) {
+  // One sentence that points somewhere: it names the weakest measured subsystem
+  // rather than repeating counts the findings and pills already carry.
+  static String _headline(
+    AutopsyGrade grade,
+    List<AutopsyFinding> findings,
+    SubsystemHealth? weakest,
+  ) {
     final crit =
         findings.where((f) => f.severity == AutopsySeverity.critical).length;
     final warn =
         findings.where((f) => f.severity == AutopsySeverity.warning).length;
+    final area = weakest?.name.toLowerCase();
     if (crit > 0) {
-      return '${grade.label} — $crit critical issue${crit == 1 ? '' : 's'} '
-          'need attention';
+      return area == null
+          ? '${grade.label} — needs attention now'
+          : '${grade.label} — $area is dragging the app down';
     }
     if (warn > 0) {
-      return '${grade.label} — nothing urgent, '
-          '$warn thing${warn == 1 ? '' : 's'} to watch';
+      return area == null
+          ? '${grade.label} — a couple of things to watch'
+          : '${grade.label} — solid, but keep an eye on $area';
     }
-    return '${grade.label} — no issues detected';
+    return '${grade.label} — nothing needs fixing right now';
   }
 
   /// Paste-ready Markdown for a bug report, PR description or ticket. Groups the

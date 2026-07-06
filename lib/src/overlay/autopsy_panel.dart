@@ -244,16 +244,15 @@ class _GradeHero extends StatelessWidget {
                     height: 1.3,
                   ),
                 ),
-                if (autopsy.apiTotal > 0) ...[
-                  const SizedBox(height: 4),
-                  Text(
-                    '${autopsy.apiTotal} requests · ${autopsy.apiErrors} failed'
-                    '${autopsy.slowestLabel != null ? ' · slowest ${autopsy.slowestMs}ms' : ''}',
-                    style: const TextStyle(color: Colors.white38, fontSize: 10.5),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ],
+                const SizedBox(height: 4),
+                Text(
+                  autopsy.criticalCount > 0 || autopsy.warningCount > 0
+                      ? 'Ranked most-urgent first — start at the top'
+                      : 'Exercise a flow, then reopen to re-grade',
+                  style: const TextStyle(color: Colors.white38, fontSize: 10.5),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
               ],
             ),
           ),

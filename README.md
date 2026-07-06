@@ -68,9 +68,11 @@ single **graded verdict** —
   junior can read (`Healthy — nothing urgent, one thing to watch`);
 - three **subsystem scores** — **Network**, **Rendering**, **Stability** — so a
   senior sees exactly *where* the health went;
-- a **prioritized findings list** (critical → healthy): server 5xx, auth
-  rejections, slow calls, duplicate requests, oversized payloads, dropped
-  frames / stalls, uncaught crashes — each with the evidence attached;
+- a **prioritized findings list** (most-urgent first) that *diagnoses and
+  prescribes* rather than restating numbers you can already see — "failures are
+  server-side, not in the app", "the same request is firing more than once —
+  debounce or guard it", "the UI thread is the bottleneck — move heavy work off
+  build()";
 - **one-tap Markdown export** of the whole report, ready to paste into a bug
   report, PR description or ticket.
 

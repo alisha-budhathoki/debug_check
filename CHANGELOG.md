@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.5.1
+
+- Reworked the Autopsy so it no longer echoes numbers already shown elsewhere in
+  the deck. Findings now read as a **diagnosis + a fix** in plain language
+  ("Failures are server-side, not in the app", "The same request is firing more
+  than once — debounce or guard it") instead of restating counts you can see in
+  the API stats, Perf and Errors tabs.
+- Failures are consolidated into a single finding framed by the **dominant
+  cause** (server-side 5xx vs. auth vs. client), rather than one line per bucket.
+- The grade hero drops the `requests · failed · slowest` strip (already in the
+  insight strip / Info tab); the headline now names the **weakest subsystem**
+  ("Poor — network is dragging the app down").
+- Redundant per-subsystem "all good" findings are gone — a clean run is carried
+  by the green subsystem bars plus one honest "Nothing to fix" verdict. The
+  Markdown export stays fully self-contained for pasting into a report.
+
 ## 0.5.0
 
 - **New: App Autopsy — a one-tap health diagnosis.** A new **Autopsy** tab
