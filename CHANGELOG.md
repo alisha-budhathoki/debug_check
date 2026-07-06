@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.5.0
+
+- **New: App Autopsy — a one-tap health diagnosis.** A new **Autopsy** tab
+  synthesizes everything the deck already captures — network traffic, rendering
+  timings and uncaught errors — into a single graded verdict (A–F / 0–100) with
+  per-subsystem scores for **Network**, **Rendering** and **Stability**, and a
+  prioritized list of plain-language findings (server 5xx, auth rejections, slow
+  and duplicate calls, oversized payloads, jank/stalls, crashes). It recomputes
+  live as traffic completes and frames land, and exports the whole report as
+  **Markdown** for a bug report, PR description or ticket with one tap.
+- The diagnosis is a pure, unit-tested function (`AppAutopsy.diagnose`) exposed
+  publicly, so you can grade a session programmatically or in tests.
+- **New: `DebugTools.breadcrumb(label, [detail])`** — drop a labelled marker
+  into the timeline from anywhere. Library-agnostic: call it from a Bloc
+  `onTransition`, a Riverpod listener, a Redux middleware or a plain tap handler
+  to trace state transitions and user actions alongside API calls and errors,
+  without the package ever depending on your state layer. A no-op when disabled.
+
 ## 0.4.0
 
 - Reworked the inspector header for a clearer visual hierarchy: the tab switcher

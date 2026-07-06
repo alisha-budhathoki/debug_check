@@ -38,6 +38,9 @@ host app and switched on with a single flag.
 
 What you get, as a floating overlay (a draggable bug chip → full viewer):
 
+- **App Autopsy** — a one-tap health diagnosis that grades the whole app (A–F /
+  0–100) across **Network**, **Rendering** and **Stability**, with prioritized,
+  plain-language findings and a Markdown export for a bug report or PR.
 - **API inspector** — every Dio request/response with headers, query, bodies,
   timings, status, duplicate-call detection, and per-tab search that jumps to
   the exact matching line.
@@ -53,6 +56,50 @@ It renders **nothing** and does **no work** unless you enable it.
 ## Why debug_deck
 
 A few things it does that most in-app inspectors don't:
+
+### 🩺 App Autopsy — one tap tells you what the app *is* right now
+
+Every other inspector shows you raw logs and leaves the diagnosis to you. The
+**Autopsy** tab does the diagnosis: it reads the network traffic, the frame
+timings and the captured errors it already recorded and synthesizes them into a
+single **graded verdict** —
+
+- an overall **grade (A–F)** and **0–100 score**, with a one-line headline a
+  junior can read (`Healthy — nothing urgent, one thing to watch`);
+- three **subsystem scores** — **Network**, **Rendering**, **Stability** — so a
+  senior sees exactly *where* the health went;
+- a **prioritized findings list** (critical → healthy): server 5xx, auth
+  rejections, slow calls, duplicate requests, oversized payloads, dropped
+  frames / stalls, uncaught crashes — each with the evidence attached;
+- **one-tap Markdown export** of the whole report, ready to paste into a bug
+  report, PR description or ticket.
+
+It recomputes live as calls complete and frames land. The grading is a pure,
+unit-tested function you can also call yourself:
+
+```dart
+final autopsy = AppAutopsy.diagnose(
+  entries: DebugLogger.instance.entries.value,
+  perf: PerfMonitor.instance.stats.value,
+  duplicates: const {}, // or your duplicate map
+);
+print(autopsy.grade.letter); // A / B / C / D / F
+print(autopsy.toMarkdown());
+```
+
+### 🧭 Breadcrumbs from any state layer — no coupling
+
+Want state transitions and user actions in the trail (and in the Autopsy's
+context)? Drop a breadcrumb from anywhere — it's deliberately library-agnostic,
+so it works with Bloc, Riverpod, Redux, provider or a plain button handler
+without the package depending on your state management:
+
+```dart
+DebugTools.breadcrumb('CartBloc', 'AddItem(sku: 42)'); // from onTransition
+DebugTools.breadcrumb('Tapped “Checkout”');            // from a tap handler
+```
+
+It's a no-op when the tools are disabled, so it's safe to leave in shipping code.
 
 ### 🔎 Search *inside* every request and response — and jump to the hit
 

@@ -1,28 +1,46 @@
-// This is a basic Flutter widget test.
-//
-// To perform an interaction with a widget in your test, use the WidgetTester
-// utility in the flutter_test package. For example, you can send tap and scroll
-// gestures. You can also use WidgetTester to find child widgets in the widget
-// tree, read text, and verify that the values of widget properties are correct.
-
+import 'package:debug_deck/debug_deck.dart';
+import 'package:debug_deck_example/main.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  testWidgets('Counter increments smoke test', (WidgetTester tester) async {
-    // Build our app and trigger a frame.
-    // await tester.pumpWidget(const MyApp());
+  testWidgets('Autopsy tab renders a graded diagnosis from seeded traffic',
+      (tester) async {
+    DebugTools.init(
+      enabled: true,
+      appInfo: const DebugAppInfo(
+        version: 'test',
+        environmentName: 'test',
+        baseUrl: 'https://api.example.com',
+        isNativeCall: false,
+      ),
+    );
+    DebugLogger.instance.clear();
+    seedDemoData();
 
-    // Verify that our counter starts at 0.
-    expect(find.text('0'), findsOneWidget);
-    expect(find.text('1'), findsNothing);
+    await tester.pumpWidget(const DemoApp());
+    await tester.pumpAndSettle();
 
-    // Tap the '+' icon and trigger a frame.
-    await tester.tap(find.byIcon(Icons.add));
-    await tester.pump();
+    // Open the floating debug overlay (the bug chip sits top-left). The chip
+    // handles taps via a raw Listener, so the icon itself isn't the hit target.
+    await tester.tap(
+      find.byIcon(Icons.bug_report_rounded).first,
+      warnIfMissed: false,
+    );
+    await tester.pumpAndSettle();
 
-    // Verify that our counter has incremented.
-    expect(find.text('0'), findsNothing);
-    expect(find.text('1'), findsOneWidget);
+    // Switch to the Autopsy tab.
+    await tester.tap(find.text('Autopsy'));
+    await tester.pumpAndSettle();
+
+    // The report is present: findings header + the three subsystem scores.
+    expect(find.text('FINDINGS'), findsOneWidget);
+    expect(find.text('NETWORK'), findsOneWidget);
+    expect(find.text('RENDERING'), findsOneWidget);
+    expect(find.text('STABILITY'), findsOneWidget);
+
+    // Seeded traffic includes a 500 + a platform error, so at least one
+    // critical finding must surface.
+    expect(find.byIcon(Icons.error_outline), findsWidgets);
   });
 }

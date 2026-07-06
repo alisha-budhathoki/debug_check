@@ -7,6 +7,7 @@ import 'package:flutter/services.dart';
 
 part 'api_detail.dart';
 part 'app_info_panel.dart';
+part 'autopsy_panel.dart';
 part 'detail_widgets.dart';
 part 'formatting.dart';
 part 'log_list.dart';

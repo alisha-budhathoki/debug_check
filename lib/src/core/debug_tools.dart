@@ -92,6 +92,24 @@ class DebugTools {
   /// inspector. Add it to your Dio client's interceptors.
   static Interceptor dioInterceptor() => DebugDioInterceptor();
 
+  /// Drop a labelled marker into the log/activity timeline — a state-management
+  /// transition, a user action, a feature-flag flip, anything worth a trail.
+  /// Deliberately library-agnostic: call it from a Bloc `onTransition`, a
+  /// Riverpod listener, a Redux middleware or a plain button handler, and it
+  /// shows up interleaved with API calls and errors — and in the Autopsy's
+  /// context — without the package ever depending on your state layer.
+  ///
+  /// ```dart
+  /// DebugTools.breadcrumb('CartBloc', 'AddItem(sku: 42)');
+  /// DebugTools.breadcrumb('Tapped “Checkout”');
+  /// ```
+  ///
+  /// A no-op when [enabled] is false, so it is safe to leave in shipping code.
+  static void breadcrumb(String label, [String? detail]) {
+    if (!enabled) return;
+    DebugLogger.instance.logInfo(label, detail);
+  }
+
   /// NavigatorObserver that labels the current screen in the Perf tab. Add it
   /// to your `GoRouter`/`Navigator` observers.
   static NavigatorObserver get routeObserver => CurrentScreenObserver.instance;

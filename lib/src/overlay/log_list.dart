@@ -75,8 +75,9 @@ class _DebugLogViewerState extends State<_DebugLogViewer> {
     final isInfoTab = _filter == 'info';
     final isGridTab = _filter == 'grid';
     final isPerfTab = _filter == 'perf';
-    // Info, Grid and Perf are control panels, not log lists.
-    final isPanelTab = isInfoTab || isGridTab || isPerfTab;
+    final isAutopsyTab = _filter == 'autopsy';
+    // Autopsy, Info, Grid and Perf are control panels, not log lists.
+    final isPanelTab = isInfoTab || isGridTab || isPerfTab || isAutopsyTab;
     final filtered =
         isPanelTab
             ? const <DebugLogEntry>[]
@@ -109,7 +110,9 @@ class _DebugLogViewerState extends State<_DebugLogViewer> {
               _DuplicateWarningBar(count: dupeRows),
             Expanded(
               child:
-                  isGridTab
+                  isAutopsyTab
+                      ? const _AutopsyPanel()
+                      : isGridTab
                       ? const DebugGridPanel()
                       : isPerfTab
                       ? const _PerfPanel()
@@ -764,12 +767,18 @@ class _InsightStrip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Perf is the one tab whose numbers change continuously, so it rebuilds off
-    // the live stats notifier; every other tab is derived from data in hand.
+    // Perf and Autopsy change continuously, so they rebuild off the live stats
+    // notifier; every other tab is derived from data in hand.
     if (filter == 'perf') {
       return ValueListenableBuilder<PerfStats>(
         valueListenable: PerfMonitor.instance.stats,
         builder: (_, stats, _) => _band(_perfPills(stats)),
+      );
+    }
+    if (filter == 'autopsy') {
+      return ValueListenableBuilder<PerfStats>(
+        valueListenable: PerfMonitor.instance.stats,
+        builder: (_, stats, _) => _band(_autopsyPills(stats)),
       );
     }
     switch (filter) {
@@ -952,6 +961,56 @@ class _InsightStrip extends StatelessWidget {
     ];
   }
 
+  List<Widget> _autopsyPills(PerfStats stats) {
+    final a = AppAutopsy.diagnose(
+      entries: entries,
+      perf: stats,
+      duplicates: findDuplicateApiCalls(entries),
+    );
+    Color gradeColor(AutopsyGrade g) {
+      switch (g) {
+        case AutopsyGrade.a:
+        case AutopsyGrade.b:
+          return _green;
+        case AutopsyGrade.c:
+          return _amber;
+        case AutopsyGrade.d:
+        case AutopsyGrade.f:
+          return _red;
+      }
+    }
+
+    return [
+      _InsightPill(
+        icon: Icons.monitor_heart_outlined,
+        value: '${a.grade.letter} · ${a.score}',
+        label: 'health',
+        color: gradeColor(a.grade),
+      ),
+      if (a.criticalCount > 0)
+        _InsightPill(
+          icon: Icons.error_outline,
+          value: '${a.criticalCount}',
+          label: 'critical',
+          color: _red,
+        ),
+      if (a.warningCount > 0)
+        _InsightPill(
+          icon: Icons.warning_amber_rounded,
+          value: '${a.warningCount}',
+          label: a.warningCount == 1 ? 'warning' : 'warnings',
+          color: _amber,
+        ),
+      if (a.criticalCount == 0 && a.warningCount == 0)
+        const _InsightPill(
+          icon: Icons.check_circle_outline,
+          value: 'clean',
+          label: 'no issues',
+          color: _green,
+        ),
+    ];
+  }
+
   // ─── Local formatting (mirrors the row helpers; kept self-contained) ────────
 
   static Color _latencyColor(int ms) {
@@ -982,6 +1041,7 @@ class _TabBar extends StatelessWidget {
     ('all', 'All'),
     ('api', 'API'),
     ('errors', 'Errors'),
+    ('autopsy', 'Autopsy'),
     ('info', 'Info'),
     ('perf', 'Perf'),
     ('grid', 'Grid'),

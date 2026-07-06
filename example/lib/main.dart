@@ -60,6 +60,9 @@ class HomeScreen extends StatelessWidget {
   )..interceptors.add(DebugTools.dioInterceptor());
 
   Future<void> _fire() async {
+    // A breadcrumb marks the user action in the timeline (and feeds the Autopsy
+    // context) — library-agnostic, drop it anywhere.
+    DebugTools.breadcrumb('Tapped "Fire live API calls"');
     try {
       await _dio.get('/posts/1');
       await _dio.post('/posts', data: {'title': 'hello', 'body': 'world'});
@@ -122,6 +125,12 @@ void seedDemoData() {
   };
 
   log.logInfo('App started', 'environment: staging - cold start 812ms');
+
+  // Breadcrumbs — state transitions / user actions fed in from anywhere via
+  // DebugTools.breadcrumb(...). They interleave with traffic in the timeline and
+  // give the Autopsy tab context for what the app was doing.
+  DebugTools.breadcrumb('AuthBloc', 'Authenticated(user: 42)');
+  DebugTools.breadcrumb('Opened PortfolioScreen');
 
   // Fast GET with a searchable JSON list response.
   log.completeApiSuccess(

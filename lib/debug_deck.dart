@@ -16,6 +16,9 @@ export 'src/logging/debug_dio_interceptor.dart' show DebugDioInterceptor;
 export 'src/logging/debug_log_entry.dart';
 export 'src/logging/debug_logger.dart';
 
+// Unified health diagnosis synthesized from network + rendering + errors.
+export 'src/autopsy/app_autopsy.dart';
+
 // Performance, app-info, navigation.
 export 'src/app_info/app_info_snapshot.dart';
 export 'src/navigation/screen_tracker.dart' show CurrentScreenObserver;
