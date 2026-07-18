@@ -57,7 +57,7 @@ class DebugDioInterceptor extends Interceptor {
       responseHeaders: _stringifyHeaders(response.headers),
       requestBody: _bodyToString(options.data),
       responseBody: responseBody,
-      responseBytes: responseBody?.length,
+      responseBytes: _bodyBytes(response.data, response.headers),
     );
     handler.next(response);
   }
@@ -84,7 +84,7 @@ class DebugDioInterceptor extends Interceptor {
               : null,
       requestBody: _bodyToString(options.data),
       responseBody: responseBody,
-      responseBytes: responseBody?.length,
+      responseBytes: _bodyBytes(err.response?.data, err.response?.headers),
       errorMessage: '${err.type.name}: ${err.message ?? err.toString()}',
     );
     handler.next(err);
@@ -122,6 +122,31 @@ class DebugDioInterceptor extends Interceptor {
     if (v is String) return v;
     if (v is List) return v.join(', ');
     return v.toString();
+  }
+
+  /// Actual payload size on the wire.
+  ///
+  /// Must not be derived from [_bodyToString]'s output: that string is
+  /// pretty-printed with indentation (inflating a compact JSON payload well
+  /// past its real size), is truncated at 20k chars, and renders a binary body
+  /// as the literal text `<binary N bytes>` — which would report 19 bytes for a
+  /// 4 MB download. This feeds the LARGE insight chip and the Autopsy's
+  /// heavy-payload finding, so a wrong number here shows up as wrong advice.
+  int? _bodyBytes(dynamic body, Headers? headers) {
+    final declared = int.tryParse(headers?.value('content-length') ?? '');
+    if (declared != null && declared >= 0) return declared;
+    if (body == null) return null;
+    if (body is List<int>) return body.length;
+    try {
+      if (body is String) return utf8.encode(body).length;
+      if (body is Map || body is List) {
+        return utf8.encode(jsonEncode(body)).length; // compact, not indented
+      }
+    } catch (_) {
+      // Un-encodable body (cyclic, or a type jsonEncode rejects) — better to
+      // report nothing than a fabricated size.
+    }
+    return null;
   }
 
   String? _bodyToString(dynamic body) {

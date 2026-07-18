@@ -6,6 +6,15 @@ void main() {
   WidgetsFlutterBinding.ensureInitialized();
 
   DebugTools.init(
+    persistSession: true,
+    // `hide` keeps the raw value so the eye toggle in the API-detail header can
+    // reveal it on demand — tap it and the masked `Bearer ••••oken` in the
+    // Headers tab becomes the real token, along with cURL/JSON/HAR.
+    //
+    // The default is `drop`, which discards the raw value at capture and shows
+    // no toggle at all. Prefer that in a real app unless someone actually needs
+    // to read tokens on-device: revealable means still-in-memory.
+    redaction: DebugRedaction.standard(mode: RedactionMode.hide),
     enabled: true,
     appInfo: const DebugAppInfo(
       version: '1.0.0 (42)',

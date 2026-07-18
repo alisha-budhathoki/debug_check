@@ -15,6 +15,15 @@ export 'src/core/debug_tools.dart';
 export 'src/logging/debug_dio_interceptor.dart' show DebugDioInterceptor;
 export 'src/logging/debug_log_entry.dart';
 export 'src/logging/debug_logger.dart';
+export 'src/logging/duplicate_calls.dart';
+export 'src/logging/log_filter.dart';
+export 'src/logging/redaction.dart' show DebugRedaction, RedactionMode;
+
+// Session persistence across restarts.
+export 'src/persistence/session_store.dart' show SessionStore;
+
+// Whole-session bug-report export.
+export 'src/export/session_export.dart';
 
 // Unified health diagnosis synthesized from network + rendering + errors.
 export 'src/autopsy/app_autopsy.dart';

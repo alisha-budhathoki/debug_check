@@ -65,11 +65,7 @@ class _AutopsyPanel extends StatelessWidget {
         return ValueListenableBuilder<PerfStats>(
           valueListenable: PerfMonitor.instance.stats,
           builder: (context, perf, _) {
-            final autopsy = AppAutopsy.diagnose(
-              entries: entries,
-              perf: perf,
-              duplicates: findDuplicateApiCalls(entries),
-            );
+            final autopsy = AppAutopsy.diagnose(entries: entries, perf: perf);
             return _body(context, autopsy);
           },
         );

@@ -38,14 +38,22 @@ void main() {
 
   group('AppAutopsy.diagnose', () {
     test('a clean, fast, error-free session grades A', () {
+      // Distinct endpoints. Two identical GETs a second apart would be a
+      // genuine duplicate-call finding, so reusing the default URL here would
+      // mean the "clean session" fixture wasn't actually clean.
       final entries = [
         _api(id: 1, kind: DebugLogKind.apiSuccess, status: 200, ms: 120),
-        _api(id: 2, kind: DebugLogKind.apiSuccess, status: 200, ms: 90),
+        _api(
+          id: 2,
+          kind: DebugLogKind.apiSuccess,
+          status: 200,
+          ms: 90,
+          url: 'https://api.example.com/v1/profile',
+        ),
       ];
       final a = AppAutopsy.diagnose(
         entries: entries,
         perf: PerfStats.empty,
-        duplicates: const {},
         now: at,
       );
       expect(a.grade, AutopsyGrade.a);
@@ -67,7 +75,6 @@ void main() {
         final a = AppAutopsy.diagnose(
           entries: entries,
           perf: PerfStats.empty,
-          duplicates: const {},
           now: at,
         );
         expect(a.criticalCount, greaterThan(0));
@@ -96,12 +103,7 @@ void main() {
         avgRasterMs: 6,
         recentTotalsMs: [12, 140, 18],
       );
-      final a = AppAutopsy.diagnose(
-        entries: const [],
-        perf: perf,
-        duplicates: const {},
-        now: at,
-      );
+      final a = AppAutopsy.diagnose(entries: const [], perf: perf, now: at);
       expect(a.rendering.hasData, isTrue);
       expect(a.rendering.score, lessThan(80));
       expect(
@@ -119,7 +121,6 @@ void main() {
       final a = AppAutopsy.diagnose(
         entries: const [],
         perf: PerfStats.empty,
-        duplicates: const {},
         now: at,
       );
       expect(a.network.hasData, isFalse);
@@ -132,7 +133,6 @@ void main() {
       final a = AppAutopsy.diagnose(
         entries: [_error(1, 'Null check operator used on a null value')],
         perf: PerfStats.empty,
-        duplicates: const {},
         now: at,
       );
       expect(a.stability.score, lessThan(100));
@@ -143,13 +143,81 @@ void main() {
       final a = AppAutopsy.diagnose(
         entries: [_api(id: 1, kind: DebugLogKind.apiError, status: 500)],
         perf: PerfStats.empty,
-        duplicates: const {},
         now: at,
       );
       final md = a.toMarkdown();
       expect(md, contains('## App Autopsy'));
       expect(md, contains('| Subsystem | Score |'));
       expect(md, contains('Critical'));
+    });
+  });
+
+  group('duplicate detection feeds the network score', () {
+    List<DebugLogEntry> burst(int n, {int startSecond = 1}) => [
+      for (var i = 0; i < n; i++)
+        _api(
+          id: startSecond + i,
+          kind: DebugLogKind.apiSuccess,
+          status: 200,
+          ms: 50,
+        ),
+    ];
+
+    test('one burst of three counts once, not three times', () {
+      // Rows-vs-clusters: the old code counted 3 flagged rows for a single
+      // triple-fire and applied a 9-point penalty where 3 was intended.
+      final a = AppAutopsy.diagnose(
+        entries: burst(3),
+        perf: PerfStats.empty,
+        now: at,
+      );
+      expect(findDuplicateCallClusters(burst(3)).length, 1);
+      // The penalty lands on the network subsystem; the overall is a weighted
+      // mean across network + stability, so assert the number under test.
+      expect(a.network.score, 97, reason: '100 - (1 cluster * 3)');
+    });
+
+    test('two separate bursts count twice', () {
+      final entries = [
+        ...burst(2, startSecond: 1),
+        // Far enough apart to break the 5s run, so this is a second burst.
+        ...burst(2, startSecond: 40),
+      ];
+      expect(findDuplicateCallClusters(entries).length, 2);
+      final a = AppAutopsy.diagnose(
+        entries: entries,
+        perf: PerfStats.empty,
+        now: at,
+      );
+      expect(a.network.score, 94, reason: '100 - (2 clusters * 3)');
+    });
+
+    test('calls to distinct endpoints are not duplicates', () {
+      final entries = [
+        _api(id: 1, kind: DebugLogKind.apiSuccess, status: 200),
+        _api(
+          id: 2,
+          kind: DebugLogKind.apiSuccess,
+          status: 200,
+          url: 'https://api.example.com/v1/profile',
+        ),
+      ];
+      expect(findDuplicateCallClusters(entries), isEmpty);
+      expect(
+        AppAutopsy.diagnose(
+          entries: entries,
+          perf: PerfStats.empty,
+          now: at,
+        ).network.score,
+        100,
+      );
+    });
+
+    test('findDuplicateApiCalls is reachable from outside the package', () {
+      // The README documented calling diagnose() directly, but the map it
+      // required came from a function trapped in a part file.
+      expect(findDuplicateApiCalls(burst(3)).length, 3);
+      expect(findDuplicateApiCalls(burst(3)).values, everyElement(3));
     });
   });
 }

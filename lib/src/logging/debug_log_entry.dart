@@ -30,6 +30,11 @@ class DebugLogEntry {
   final String? errorMessage;
   final String? stackTrace;
 
+  /// Kept out of the ring buffer's eviction. The 200-entry cap means the call
+  /// you are investigating scrolls out of existence while you read it; pinning
+  /// is the escape hatch.
+  final bool pinned;
+
   const DebugLogEntry({
     required this.id,
     required this.timestamp,
@@ -48,7 +53,29 @@ class DebugLogEntry {
     this.responseBytes,
     this.errorMessage,
     this.stackTrace,
+    this.pinned = false,
   });
+
+  DebugLogEntry copyWith({bool? pinned}) => DebugLogEntry(
+    id: id,
+    timestamp: timestamp,
+    kind: kind,
+    title: title,
+    subtitle: subtitle,
+    method: method,
+    url: url,
+    statusCode: statusCode,
+    duration: duration,
+    queryParameters: queryParameters,
+    requestHeaders: requestHeaders,
+    responseHeaders: responseHeaders,
+    requestBody: requestBody,
+    responseBody: responseBody,
+    responseBytes: responseBytes,
+    errorMessage: errorMessage,
+    stackTrace: stackTrace,
+    pinned: pinned ?? this.pinned,
+  );
 
   bool get isApi =>
       kind == DebugLogKind.apiInFlight ||

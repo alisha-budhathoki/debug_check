@@ -18,8 +18,12 @@ class _DebugLogViewer extends StatefulWidget {
 }
 
 class _DebugLogViewerState extends State<_DebugLogViewer> {
-  String _filter = 'all'; // all | api | errors | info
+  // Tab ids. 'app' (not 'info') names the App Info panel: DebugLogKind.info is
+  // what breadcrumbs are recorded as, and having the panel own that id meant
+  // the log filter for breadcrumbs could never be written.
+  String _filter = 'all'; // all | api | errors | autopsy | app | perf | grid
   String _search = '';
+  LogFilter _advanced = LogFilter.none;
   int? _detailId; // open API detail screen (by entry id, for live freshness)
   late final TextEditingController _searchCtrl;
 
@@ -44,11 +48,13 @@ class _DebugLogViewerState extends State<_DebugLogViewer> {
         if (!e.isError) return false;
         break;
     }
+    if (!_advanced.matches(e)) return false;
     if (_search.isEmpty) return true;
     final q = _search.toLowerCase();
     return e.title.toLowerCase().contains(q) ||
         (e.url?.toLowerCase().contains(q) ?? false) ||
-        (e.errorMessage?.toLowerCase().contains(q) ?? false);
+        (e.errorMessage?.toLowerCase().contains(q) ?? false) ||
+        e.subtitle.toLowerCase().contains(q);
   }
 
   @override
@@ -72,7 +78,7 @@ class _DebugLogViewerState extends State<_DebugLogViewer> {
       }
     }
 
-    final isInfoTab = _filter == 'info';
+    final isInfoTab = _filter == 'app';
     final isGridTab = _filter == 'grid';
     final isPerfTab = _filter == 'perf';
     final isAutopsyTab = _filter == 'autopsy';
@@ -105,6 +111,8 @@ class _DebugLogViewerState extends State<_DebugLogViewer> {
               searchCtrl: _searchCtrl,
               onSearchChanged: (v) => setState(() => _search = v),
               searchEnabled: !isPanelTab,
+              advanced: _advanced,
+              onAdvancedChange: (f) => setState(() => _advanced = f),
             ),
             if (!isPanelTab && dupeRows > 0)
               _DuplicateWarningBar(count: dupeRows),
@@ -130,6 +138,10 @@ class _DebugLogViewerState extends State<_DebugLogViewer> {
                             entry: entry,
                             duplicateCount: dupes[entry.id],
                             onOpen: (e) => setState(() => _detailId = e.id),
+                            onTogglePin:
+                                (e) => setState(
+                                  () => DebugLogger.instance.togglePin(e.id),
+                                ),
                           );
                         },
                       ),
@@ -392,61 +404,6 @@ class _DuplicateWarningBar extends StatelessWidget {
   }
 }
 
-/// Detects API entries that share an identical request — method, path, query
-/// parameters AND request body — with another entry within [window]. A matching
-/// endpoint alone is not enough; everything must be the same. Returns id →
-/// cluster size (always ≥ 2 for entries that have a duplicate). Entries with
-/// cluster size 1 (no duplicates) are omitted.
-///
-/// Complexity: O(n) — single pass grouping + linear cluster sweep.
-Map<int, int> findDuplicateApiCalls(
-  List<DebugLogEntry> entries, {
-  Duration window = const Duration(seconds: 5),
-}) {
-  final byKey = <String, List<DebugLogEntry>>{};
-  for (final e in entries) {
-    if (!e.isApi || e.url == null || e.method == null) continue;
-    final uri = Uri.tryParse(e.url!);
-    final path =
-        uri?.path.isNotEmpty == true ? uri!.path : (uri?.toString() ?? e.url!);
-    // Merge query params from the URL and the explicit map, then sort so that
-    // ordering differences don't affect the key.
-    final query = <String, String>{
-      ...?uri?.queryParameters,
-      ...?e.queryParameters,
-    };
-    final sortedQuery = (query.keys.toList()..sort())
-        .map((k) => '$k=${query[k]}')
-        .join('&');
-    // A request is only a duplicate when method, path, query params AND body
-    // all match — endpoint alone is not enough.
-    final key = '${e.method}|$path|$sortedQuery|${e.requestBody ?? ''}';
-    byKey.putIfAbsent(key, () => []).add(e);
-  }
-
-  final result = <int, int>{};
-  for (final group in byKey.values) {
-    if (group.length < 2) continue;
-    // Sort oldest → newest so we can use a sliding window.
-    group.sort((a, b) => a.timestamp.compareTo(b.timestamp));
-    for (var i = 0; i < group.length; i++) {
-      int clusterSize = 1;
-      // count backwards while still within window
-      for (var j = i - 1; j >= 0; j--) {
-        if (group[i].timestamp.difference(group[j].timestamp) > window) break;
-        clusterSize++;
-      }
-      // count forwards while still within window
-      for (var j = i + 1; j < group.length; j++) {
-        if (group[j].timestamp.difference(group[i].timestamp) > window) break;
-        clusterSize++;
-      }
-      if (clusterSize > 1) result[group[i].id] = clusterSize;
-    }
-  }
-  return result;
-}
-
 // ─── App info panel ──────────────────────────────────────────────────────────
 
 class _ViewerHeader extends StatelessWidget {
@@ -468,6 +425,12 @@ class _ViewerHeader extends StatelessWidget {
   /// height, inert so it plainly has no effect there.
   final bool searchEnabled;
 
+  /// Secondary filters (category / status class / method / pinned) and their
+  /// setter. Kept behind a button rather than another header row — see
+  /// [LogFilter]'s docs for why.
+  final LogFilter advanced;
+  final ValueChanged<LogFilter> onAdvancedChange;
+
   const _ViewerHeader({
     required this.filter,
     required this.onFilterChange,
@@ -480,6 +443,8 @@ class _ViewerHeader extends StatelessWidget {
     required this.entries,
     required this.duplicateRows,
     required this.searchCtrl,
+    required this.advanced,
+    required this.onAdvancedChange,
     required this.onSearchChanged,
     this.searchEnabled = true,
   });
@@ -516,6 +481,14 @@ class _ViewerHeader extends StatelessWidget {
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
+              // Whole-session export — the artefact you actually attach to a
+              // bug report, as opposed to the per-call exports inside a detail.
+              _HeaderIconButton(
+                icon: Icons.ios_share,
+                tooltip: 'Export session',
+                onTap: () => _showSessionExport(context, entries),
+              ),
+              const SizedBox(width: 2),
               _HeaderIconButton(
                 icon: Icons.delete_outline,
                 tooltip: 'Clear logs',
@@ -573,12 +546,103 @@ class _ViewerHeader extends StatelessWidget {
           // Search stays mounted on every tab (fixed height) but is disabled on
           // the panel tabs, where it has nothing to filter — inert, not hidden.
           const SizedBox(height: 8),
-          _SearchField(
-            controller: searchCtrl,
-            onChanged: onSearchChanged,
-            enabled: searchEnabled,
+          Row(
+            children: [
+              Expanded(
+                child: _SearchField(
+                  controller: searchCtrl,
+                  onChanged: onSearchChanged,
+                  enabled: searchEnabled,
+                ),
+              ),
+              const SizedBox(width: 6),
+              _FilterButton(
+                active: advanced,
+                enabled: searchEnabled, // same tabs the search box applies to
+                entries: entries,
+                onChange: onAdvancedChange,
+              ),
+            ],
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// Opens the secondary-filter sheet, badged with how many axes are constrained
+/// so an active filter is never invisible — otherwise a filtered-empty list
+/// reads as "no logs" and sends people hunting for a bug that isn't there.
+class _FilterButton extends StatelessWidget {
+  final LogFilter active;
+  final bool enabled;
+  final List<DebugLogEntry> entries;
+  final ValueChanged<LogFilter> onChange;
+
+  const _FilterButton({
+    required this.active,
+    required this.enabled,
+    required this.entries,
+    required this.onChange,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final count = active.activeCount;
+    final on = count > 0;
+    return Opacity(
+      opacity: enabled ? 1 : 0.35,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap:
+            !enabled
+                ? null
+                : () async {
+                  HapticFeedback.selectionClick();
+                  final result = await showModalBottomSheet<LogFilter>(
+                    context: context,
+                    backgroundColor: Colors.transparent,
+                    isScrollControlled: true,
+                    builder:
+                        (_) => _FilterSheet(initial: active, entries: entries),
+                  );
+                  if (result != null) onChange(result);
+                },
+        child: Container(
+          height: 38,
+          padding: const EdgeInsets.symmetric(horizontal: 10),
+          decoration: BoxDecoration(
+            color: on ? const Color(0xFF1B2B3A) : const Color(0xFF0B0E13),
+            borderRadius: BorderRadius.circular(9),
+            border: Border.all(
+              color:
+                  on
+                      ? const Color(0xFF61AFEF).withValues(alpha: 0.55)
+                      : Colors.white.withValues(alpha: 0.08),
+            ),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                on ? Icons.filter_alt : Icons.filter_alt_outlined,
+                size: 16,
+                color: on ? const Color(0xFF61AFEF) : Colors.white54,
+              ),
+              if (on) ...[
+                const SizedBox(width: 5),
+                Text(
+                  '$count',
+                  style: const TextStyle(
+                    color: Color(0xFF61AFEF),
+                    fontSize: 11,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -788,7 +852,7 @@ class _InsightStrip extends StatelessWidget {
       );
     }
     switch (filter) {
-      case 'info':
+      case 'app':
         return _band(_infoPills());
       case 'grid':
         return _band(_gridPills(context));
@@ -968,11 +1032,7 @@ class _InsightStrip extends StatelessWidget {
   }
 
   List<Widget> _autopsyPills(PerfStats stats) {
-    final a = AppAutopsy.diagnose(
-      entries: entries,
-      perf: stats,
-      duplicates: findDuplicateApiCalls(entries),
-    );
+    final a = AppAutopsy.diagnose(entries: entries, perf: stats);
     Color gradeColor(AutopsyGrade g) {
       switch (g) {
         case AutopsyGrade.a:
@@ -1053,7 +1113,7 @@ class _TabBar extends StatelessWidget {
     ('api', 'API'),
     ('errors', 'Errors'),
     ('autopsy', 'Autopsy'),
-    ('info', 'Info'),
+    ('app', 'App'),
     ('perf', 'Perf'),
     ('grid', 'Grid'),
   ];
@@ -1332,7 +1392,13 @@ class _LogTile extends StatefulWidget {
   final DebugLogEntry entry;
   final int? duplicateCount;
   final ValueChanged<DebugLogEntry>? onOpen;
-  const _LogTile({required this.entry, this.duplicateCount, this.onOpen});
+  final ValueChanged<DebugLogEntry>? onTogglePin;
+  const _LogTile({
+    required this.entry,
+    this.duplicateCount,
+    this.onOpen,
+    this.onTogglePin,
+  });
 
   @override
   State<_LogTile> createState() => _LogTileState();
@@ -1346,6 +1412,7 @@ class _LogTileState extends State<_LogTile> {
     final e = widget.entry;
     final dup = widget.duplicateCount;
     final isDup = dup != null && dup > 1;
+    final pinned = e.pinned;
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 8),
       decoration: BoxDecoration(
@@ -1355,11 +1422,15 @@ class _LogTileState extends State<_LogTile> {
                 : const Color(0xFF161B22),
         borderRadius: BorderRadius.circular(8),
         border: Border.all(
+          // Pinned outranks duplicate: it is a deliberate user action, and the
+          // row needs to stay findable in a wall of amber duplicate warnings.
           color:
-              isDup
+              pinned
+                  ? const Color(0xFF61AFEF).withValues(alpha: 0.6)
+                  : isDup
                   ? const Color(0xFFE5C07B).withValues(alpha: 0.45)
                   : Colors.white10,
-          width: isDup ? 1.2 : 1,
+          width: pinned || isDup ? 1.2 : 1,
         ),
       ),
       child: Column(
@@ -1374,6 +1445,15 @@ class _LogTileState extends State<_LogTile> {
                 setState(() => _expanded = !_expanded);
               }
             },
+            // Long-press pins. A per-row pin button would add permanent clutter
+            // to every tile for an action used on a handful of them.
+            onLongPress:
+                widget.onTogglePin == null
+                    ? null
+                    : () {
+                      HapticFeedback.mediumImpact();
+                      widget.onTogglePin!(e);
+                    },
             borderRadius: BorderRadius.circular(8),
             child: Padding(
               padding: const EdgeInsets.fromLTRB(10, 10, 10, 10),
@@ -1423,6 +1503,7 @@ class _LogTileState extends State<_LogTile> {
           // Keep badges + chevron level with the first line when the path wraps.
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            if (e.pinned) ...[const _PinMark(), const SizedBox(width: 5)],
             _MethodBadge(method: e.method ?? '?'),
             const SizedBox(width: 6),
             _StatusBadge(kind: e.kind, statusCode: e.statusCode),
@@ -1544,6 +1625,7 @@ class _LogTileState extends State<_LogTile> {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        if (e.pinned) ...[const _PinMark(), const SizedBox(width: 5)],
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
           decoration: BoxDecoration(
@@ -1900,4 +1982,16 @@ class _Divider extends StatelessWidget {
   @override
   Widget build(BuildContext context) =>
       const Divider(color: Colors.white12, height: 16, thickness: 1);
+}
+
+/// Marks a row the user pinned. Also the only hint that long-press did
+/// something, so it sits at the start of the row where the eye lands first.
+class _PinMark extends StatelessWidget {
+  const _PinMark();
+
+  @override
+  Widget build(BuildContext context) => const Padding(
+    padding: EdgeInsets.only(top: 1),
+    child: Icon(Icons.push_pin, size: 12, color: Color(0xFF61AFEF)),
+  );
 }

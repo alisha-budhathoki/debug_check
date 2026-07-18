@@ -9,9 +9,11 @@ part 'api_detail.dart';
 part 'app_info_panel.dart';
 part 'autopsy_panel.dart';
 part 'detail_widgets.dart';
+part 'filter_sheet.dart';
 part 'formatting.dart';
 part 'log_list.dart';
 part 'perf_panel.dart';
+part 'session_export_sheet.dart';
 
 /// Mounted once via `MaterialApp.router`'s `builder` so it floats above every
 /// route — including when launched from a native add-to-app host. Renders
@@ -55,7 +57,10 @@ class _DebugOverlayState extends State<DebugOverlay>
   // detail's tab index and every scroll offset — survives a minimize→app→reopen
   // round-trip. Lazy so we pay nothing until the dev first taps the chip.
   bool _viewerMounted = false;
-  bool _hidden = false;
+  // Backed by DebugTools.overlayHidden so a host app can restore the chip
+  // programmatically; the edge handle below covers the in-app case.
+  bool get _hidden => DebugTools.overlayHidden.value;
+  set _hidden(bool v) => DebugTools.overlayHidden.value = v;
   Size? _cachedScreenSize;
 
   // Drives the circular "burst open" reveal. Linear here; the curve + clip are
@@ -146,8 +151,34 @@ class _DebugOverlayState extends State<DebugOverlay>
   Widget build(BuildContext context) {
     // Visible only when the native host hands us a `dev` environment.
     // Hidden in production regardless of build mode.
-    if (!DebugTools.enabled || _hidden) {
-      return const SizedBox.shrink();
+    if (!DebugTools.enabled) return const SizedBox.shrink();
+    if (_hidden) {
+      // Not nothing — a hidden overlay with no way back stranded the tools for
+      // the rest of the run. A narrow, low-contrast edge handle restores it
+      // without intruding on the screenshot the user hid it for.
+      return Align(
+        alignment: Alignment.centerRight,
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: () => setState(() => _hidden = false),
+          child: Container(
+            width: 14,
+            height: 56,
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.10),
+              borderRadius: const BorderRadius.horizontal(
+                left: Radius.circular(7),
+              ),
+            ),
+            alignment: Alignment.center,
+            child: Icon(
+              Icons.chevron_left,
+              size: 13,
+              color: Colors.white.withValues(alpha: 0.55),
+            ),
+          ),
+        ),
+      );
     }
 
     return Stack(

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:dio/dio.dart' show Interceptor;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
@@ -6,9 +8,11 @@ import '../app_info/app_info_snapshot.dart';
 import '../grid/debug_grid_overlay.dart';
 import '../logging/debug_dio_interceptor.dart';
 import '../logging/debug_logger.dart';
+import '../logging/redaction.dart';
 import '../navigation/screen_tracker.dart';
 import '../overlay/debug_overlay.dart';
 import '../performance/perf_monitor.dart';
+import '../persistence/session_store.dart';
 
 /// Host-supplied application facts shown in the Info / Report panels. Keeps the
 /// package decoupled from the app: instead of importing the app's config, the
@@ -63,14 +67,70 @@ class DebugTools {
 
   static DebugAppInfo appInfo = DebugAppInfo.unknown;
 
+  /// How secrets are masked before they enter the log buffer. Secure by
+  /// default: auth headers, cookies and token-ish query params are masked, so
+  /// the cURL/JSON/HAR exports are safe to paste into a bug report without the
+  /// consumer having to know to configure anything.
+  ///
+  /// Add bespoke names with `DebugRedaction.standard(also: {...})`, or opt out
+  /// entirely with [DebugRedaction.disabled].
+  static DebugRedaction redaction = DebugRedaction.standard();
+
+  /// Whether the user has chosen to reveal masked values right now.
+  ///
+  /// Only meaningful under [RedactionMode.hide], where the raw value was
+  /// retained. Drives the eye toggle in the Headers view; resets to hidden on
+  /// every launch so revealing is always a deliberate act, never a state you
+  /// forgot you left on.
+  static final ValueNotifier<bool> revealSecrets = ValueNotifier<bool>(false);
+
+  /// Whether the session's tail is written to disk so the next launch can show
+  /// what the run that crashed was doing.
+  ///
+  /// Off by default: it persists request and response bodies, which is a call
+  /// the app should make knowingly. No-op on web — see [SessionStore].
+  static bool persistSession = false;
+
+  /// Whether the floating chip is hidden ("get out of my way" for a
+  /// screenshot). Exposed so a host app can wire its own restore gesture —
+  /// hiding used to be a one-way trip recoverable only by toggling [setEnabled].
+  static final ValueNotifier<bool> overlayHidden = ValueNotifier<bool>(false);
+
+  /// Brings the chip back after [overlayHidden].
+  static void showOverlay() => overlayHidden.value = false;
+
+  /// The version of [map] that should be shown on screen or written to an
+  /// export, honouring both the configured [redaction] and the user's current
+  /// [revealSecrets] preference.
+  ///
+  /// Under [RedactionMode.drop] the stored map is already masked and is
+  /// returned untouched; under [RedactionMode.off] nothing was ever masked.
+  /// Only [RedactionMode.hide] has a decision to make.
+  static Map<String, String>? visible(Map<String, String>? map) {
+    if (!redaction.canReveal) return map;
+    return revealSecrets.value ? map : redaction.apply(map);
+  }
+
   /// Master switch read by every tool. False ⇒ no logging, no overlay, no
   /// perf capture, no work of any kind.
   static bool get enabled => enabledListenable.value;
 
   /// Wire up the tools. Safe to call once; repeated calls just refresh config.
-  static void init({required bool enabled, DebugAppInfo? appInfo}) {
+  static void init({
+    required bool enabled,
+    DebugAppInfo? appInfo,
+    DebugRedaction? redaction,
+    bool persistSession = false,
+  }) {
     if (appInfo != null) DebugTools.appInfo = appInfo;
+    if (redaction != null) DebugTools.redaction = redaction;
+    DebugTools.persistSession = persistSession;
     setEnabled(enabled);
+    // Fire-and-forget: startup must not wait on disk. The viewer is reactive,
+    // so restored entries simply appear when the read completes.
+    if (enabled && persistSession) {
+      unawaited(DebugLogger.instance.restorePreviousSession());
+    }
   }
 
   static void setEnabled(bool value) {

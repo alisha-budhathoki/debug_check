@@ -83,10 +83,18 @@ unit-tested function you can also call yourself:
 final autopsy = AppAutopsy.diagnose(
   entries: DebugLogger.instance.entries.value,
   perf: PerfMonitor.instance.stats.value,
-  duplicates: const {}, // or your duplicate map
 );
 print(autopsy.grade.letter); // A / B / C / D / F
 print(autopsy.toMarkdown());
+```
+
+Duplicate-call detection runs automatically over `entries`. Pass
+`duplicateWindow:` to change what counts as "the same call fired twice"
+(default 5s). The detectors are public too, if you want them on their own:
+
+```dart
+findDuplicateApiCalls(entries);      // entry id → how many times it fired
+findDuplicateCallClusters(entries);  // distinct bursts, for counting problems
 ```
 
 ### 🧭 Breadcrumbs from any state layer — no coupling
@@ -137,6 +145,45 @@ with the cluster size, and shows a warning bar with the count.
 Copy any call as **cURL**, a flat **JSON** dump, or a **HAR 1.2** archive you can
 drop into browser devtools or any HAR viewer — ready to paste into a bug report.
 
+Or export the **whole session** from the header: a Markdown bug report leading
+with the grade, the environment, what failed and the trail that led there; a HAR
+archive of every request; or just the Autopsy. Callable directly too:
+
+```dart
+SessionExport.toMarkdown(
+  entries: DebugLogger.instance.entries.value,
+  perf: PerfMonitor.instance.stats.value,
+);
+SessionExport.toHar(entries: DebugLogger.instance.entries.value);
+```
+
+### 🔬 Filter down to the one call that matters
+
+Beyond the tabs, the filter button opens type (**API / Errors / Events**), status
+band (**2xx…5xx**, plus **Failed** for calls that never got a response), HTTP
+method, and pinned-only. It badges how many filters are on, and previews the
+match count before you apply — so a filtered-empty list never masquerades as
+"no logs".
+
+**Events** are your breadcrumbs; **pinned** rows are exempt from the 200-entry
+eviction, so the call you're investigating can't scroll out of existence while
+you read it. Long-press any row to pin.
+
+### 💾 Survive the crash that lost your log
+
+The buffer lives in memory, so the run that died takes its evidence with it.
+Opt in and the session's tail is written to disk for the next launch to restore:
+
+```dart
+DebugTools.init(enabled: true, persistSession: true);
+```
+
+Off by default — it writes request and response bodies to disk, which is a call
+your app should make knowingly. Writes are debounced and bounded (60 entries),
+consumed on restore so they can't resurface a third time, and a no-op on web.
+No new dependency: it uses `dart:io` behind a conditional import, keeping `dio`
+the package's only dependency.
+
 ### 🧭 Keeps your place
 
 Minimise to the app and the viewer is preserved exactly — filter tab, search
@@ -180,6 +227,66 @@ DebugTools.init(
 
 `init` also installs Flutter/platform error capture, starts the perf monitor,
 and stamps app-start time — but only when `enabled` is true.
+
+#### Secrets are masked by default
+
+Because the cURL / JSON / HAR exports are meant to be pasted into a bug report
+or a PR, credentials are masked **at capture time** — a raw token never enters
+the log buffer, so it can't leak through an export, a screenshot of the Headers
+tab, or a surface added later.
+
+```
+Authorization: Bearer ••••4f2a      # scheme kept, 4-char tail kept
+```
+
+Keeping the scheme means a `Basic`-where-you-expected-`Bearer` bug is still
+visible, and the tail is enough to tell two tokens apart or confirm the app is
+sending the one you expect. Values shorter than 12 characters are masked
+entirely, since revealing 4 of 8 characters gives away too much.
+
+The default set covers `authorization`, `cookie` / `set-cookie`, `x-api-key`,
+`access_token`, `refresh_token`, CSRF tokens and similar, matched
+case-insensitively across headers **and** query parameters. Add your own names,
+or unmask one that's inert in your API:
+
+```dart
+DebugTools.init(
+  enabled: true,
+  redaction: DebugRedaction.standard(
+    also: {'x-tenant-signature'},
+    except: {'x-csrf-token'},
+  ),
+);
+```
+
+#### Letting the user decide
+
+Sometimes you genuinely need to read the token. `RedactionMode` makes the
+trade-off explicit, because **a secret you can reveal later is a secret that is
+still in memory**:
+
+| Mode | Stored | Shown | Revealable |
+|---|---|---|---|
+| `drop` *(default)* | masked only | masked | no — the raw value is gone |
+| `hide` | raw | masked | yes — eye toggle in the Headers view |
+| `off` | raw | raw | n/a |
+
+```dart
+DebugTools.init(
+  enabled: true,
+  redaction: DebugRedaction.standard(mode: RedactionMode.hide),
+);
+```
+
+Under `hide`, the API detail header grows an eye button. Tapping it swaps every
+surface at once — headers, query params, cURL, JSON and HAR — so an export can
+never carry a value the screen says is hidden. It resets to hidden on every
+launch, so revealing is always a deliberate act rather than a state you forgot
+you left on. Under `drop` the button isn't shown at all, since a toggle that
+silently does nothing is worse than no toggle.
+
+`DebugRedaction.disabled` (`mode: off`) turns masking off entirely — only
+sensible for a local session you aren't going to export or screenshot.
 
 ### 2. Mount the overlay
 

@@ -34,6 +34,16 @@ class _ApiDetailScreenState extends State<_ApiDetailScreen>
 
   @override
   Widget build(BuildContext context) {
+    // Rebuild the whole detail when the reveal preference flips: the masked vs.
+    // real value has to change everywhere at once — headers, query, cURL, JSON
+    // and HAR — or an export could carry a value the screen says is hidden.
+    return ValueListenableBuilder<bool>(
+      valueListenable: DebugTools.revealSecrets,
+      builder: (context, _, _) => _build(context),
+    );
+  }
+
+  Widget _build(BuildContext context) {
     final e = widget.entry;
     return Material(
       color: const Color(0xFF0E1116),
@@ -131,6 +141,29 @@ class _ApiDetailScreenState extends State<_ApiDetailScreen>
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
+              // Only offered when the raw value actually survived capture.
+              // Under the default drop mode there is nothing to reveal, and a
+              // toggle that silently does nothing would be worse than absent.
+              if (DebugTools.redaction.canReveal)
+                _HeaderIconButton(
+                  icon:
+                      DebugTools.revealSecrets.value
+                          ? Icons.visibility_off_outlined
+                          : Icons.visibility_outlined,
+                  tint:
+                      DebugTools.revealSecrets.value
+                          ? const Color(0xFFE5C07B)
+                          : null,
+                  tooltip:
+                      DebugTools.revealSecrets.value
+                          ? 'Hide secrets again'
+                          : 'Reveal masked secrets',
+                  onTap: () {
+                    HapticFeedback.selectionClick();
+                    DebugTools.revealSecrets.value =
+                        !DebugTools.revealSecrets.value;
+                  },
+                ),
               _HeaderIconButton(
                 icon: Icons.terminal,
                 tooltip: 'Copy as cURL',
@@ -264,7 +297,8 @@ class _ApiDetailScreenState extends State<_ApiDetailScreen>
   }
 
   List<_DetailSectionData> _requestSections(DebugLogEntry e) {
-    final query = e.queryParameters ?? const <String, String>{};
+    final query =
+        DebugTools.visible(e.queryParameters) ?? const <String, String>{};
     return [
       if (query.isNotEmpty)
         _DetailSectionData(
@@ -302,8 +336,10 @@ class _ApiDetailScreenState extends State<_ApiDetailScreen>
 
   List<_DetailSectionData> _headerSections(DebugLogEntry e) {
     final out = <_DetailSectionData>[];
-    final req = e.requestHeaders ?? const <String, String>{};
-    final res = e.responseHeaders ?? const <String, String>{};
+    final req =
+        DebugTools.visible(e.requestHeaders) ?? const <String, String>{};
+    final res =
+        DebugTools.visible(e.responseHeaders) ?? const <String, String>{};
     if (req.isNotEmpty) {
       out.add(
         _DetailSectionData(
@@ -444,7 +480,9 @@ class _ApiDetailScreenState extends State<_ApiDetailScreen>
 
   static String _apiCurl(DebugLogEntry e) {
     final buf = StringBuffer('curl -X ${e.method ?? "GET"}');
-    e.requestHeaders?.forEach((k, v) => buf.write(" -H '$k: $v'"));
+    DebugTools.visible(
+      e.requestHeaders,
+    )?.forEach((k, v) => buf.write(" -H '$k: $v'"));
     if (e.requestBody?.isNotEmpty ?? false) {
       buf.write(" --data '${e.requestBody!.replaceAll("'", r"'\''")}'");
     }
@@ -462,13 +500,13 @@ class _ApiDetailScreenState extends State<_ApiDetailScreen>
       'durationMs': e.duration?.inMilliseconds,
       'startedAt': e.timestamp.toIso8601String(),
       if (e.queryParameters?.isNotEmpty ?? false)
-        'queryParameters': e.queryParameters,
+        'queryParameters': DebugTools.visible(e.queryParameters),
       if (e.requestHeaders?.isNotEmpty ?? false)
-        'requestHeaders': e.requestHeaders,
+        'requestHeaders': DebugTools.visible(e.requestHeaders),
       if (e.requestBody?.isNotEmpty ?? false)
         'requestBody': _maybeDecode(e.requestBody!),
       if (e.responseHeaders?.isNotEmpty ?? false)
-        'responseHeaders': e.responseHeaders,
+        'responseHeaders': DebugTools.visible(e.responseHeaders),
       if (e.responseBytes != null) 'responseBytes': e.responseBytes,
       if (e.responseBody?.isNotEmpty ?? false)
         'responseBody': _maybeDecode(e.responseBody!),
@@ -507,8 +545,8 @@ class _ApiDetailScreenState extends State<_ApiDetailScreen>
               'url': e.url ?? '',
               'httpVersion': 'HTTP/1.1',
               'cookies': const [],
-              'headers': nv(e.requestHeaders),
-              'queryString': nv(e.queryParameters),
+              'headers': nv(DebugTools.visible(e.requestHeaders)),
+              'queryString': nv(DebugTools.visible(e.queryParameters)),
               if (reqBody != null && reqBody.isNotEmpty)
                 'postData': {
                   'mimeType': mime(e.requestHeaders),
@@ -523,7 +561,7 @@ class _ApiDetailScreenState extends State<_ApiDetailScreen>
                   e.statusCode != null ? _statusText(e.statusCode!) : '',
               'httpVersion': 'HTTP/1.1',
               'cookies': const [],
-              'headers': nv(e.responseHeaders),
+              'headers': nv(DebugTools.visible(e.responseHeaders)),
               'content': {
                 'size': e.responseBytes ?? (resBody?.length ?? 0),
                 'mimeType': mime(e.responseHeaders),

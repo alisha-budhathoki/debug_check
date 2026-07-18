@@ -4,8 +4,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  testWidgets('Autopsy tab renders a graded diagnosis from seeded traffic',
-      (tester) async {
+  testWidgets('Autopsy tab renders a graded diagnosis from seeded traffic', (
+    tester,
+  ) async {
     DebugTools.init(
       enabled: true,
       appInfo: const DebugAppInfo(
@@ -45,7 +46,9 @@ void main() {
 
     // Findings prescribe rather than restate metrics: the seeded 500 is
     // diagnosed as a server-side failure, not echoed as a "500" count.
-    expect(find.text('Failures are server-side, not in the app'),
-        findsOneWidget);
+    expect(
+      find.text('Failures are server-side, not in the app'),
+      findsOneWidget,
+    );
   });
 }

@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 
 import '../logging/debug_log_entry.dart';
+import '../logging/duplicate_calls.dart';
 import '../performance/perf_monitor.dart';
 
 /// Overall letter grade for a diagnosis. Maps 1:1 to a 0–100 score band and a
@@ -111,16 +112,24 @@ class AppAutopsy {
 
   /// Run the diagnosis. [now] is injectable so the result is deterministic in
   /// tests; production passes `DateTime.now()`.
+  ///
+  /// Duplicate detection runs automatically over [entries]. Pass
+  /// [duplicateWindow] to widen or narrow what counts as "the same call fired
+  /// twice" (default 5s).
   static AppAutopsy diagnose({
     required List<DebugLogEntry> entries,
     required PerfStats perf,
-    required Map<int, int> duplicates,
+    Duration duplicateWindow = const Duration(seconds: 5),
     DateTime? now,
   }) {
     final at = now ?? DateTime.now();
     final findings = <AutopsyFinding>[];
 
-    final network = _diagnoseNetwork(entries, duplicates, findings);
+    final clusters = findDuplicateCallClusters(
+      entries,
+      window: duplicateWindow,
+    );
+    final network = _diagnoseNetwork(entries, clusters.length, findings);
     final rendering = _diagnoseRendering(perf, findings);
     final stability = _diagnoseStability(entries, findings);
 
@@ -193,7 +202,10 @@ class AppAutopsy {
 
   static SubsystemHealth _diagnoseNetwork(
     List<DebugLogEntry> entries,
-    Map<int, int> duplicates,
+    // Distinct duplicate *bursts*, not flagged rows. Counting rows scored one
+    // triple-fire as three separate problems — a 9-point penalty where the
+    // intent was 3.
+    int dupeClusters,
     List<AutopsyFinding> out,
   ) {
     final api = entries.where((e) => e.isApi).toList(growable: false);
@@ -221,8 +233,6 @@ class AppAutopsy {
     final huge = completed
         .where((e) => (e.responseBytes ?? 0) > 512 * 1024)
         .toList(growable: false);
-    // Duplicate *clusters* (distinct groups), not individual flagged rows.
-    final dupeRows = api.where((e) => duplicates.containsKey(e.id)).length;
     final server5xx = errors
         .where((e) => (e.statusCode ?? 0) >= 500)
         .toList(growable: false);
@@ -233,7 +243,7 @@ class AppAutopsy {
     var score = 100.0;
     score -= errorRate * 60; // 50% failures ⇒ −30
     score -= (slow.length / completed.length) * 25;
-    score -= (dupeRows * 3).clamp(0, 15);
+    score -= (dupeClusters * 3).clamp(0, 15);
     score -= (huge.length * 5).clamp(0, 15);
     if (avg > 800) score -= 8;
     final clamped = score.clamp(0, 100).round();
@@ -295,7 +305,7 @@ class AppAutopsy {
         ),
       );
     }
-    if (dupeRows > 0) {
+    if (dupeClusters > 0) {
       out.add(
         const AutopsyFinding(
           severity: AutopsySeverity.warning,

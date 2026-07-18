@@ -46,6 +46,10 @@ class DebugLogger {
   static const int _maxEntries = 200;
   static const int _maxBodyChars = 20000;
 
+  /// Ceiling on pinned entries held past the cap, so "pin everything" can't
+  /// turn the bounded buffer into an unbounded one.
+  static const int _maxPinned = 50;
+
   final Queue<DebugLogEntry> _entries = Queue<DebugLogEntry>();
   int _nextId = 0;
   int _errorCount = 0;
@@ -89,6 +93,37 @@ class DebugLogger {
     return false;
   }
 
+  /// Pin or unpin an entry, exempting it from ring-buffer eviction.
+  ///
+  /// Returns the new pinned state, or null if the id is gone.
+  bool? togglePin(int id) {
+    if (!DebugTools.enabled) return null;
+    final list = _entries.toList();
+    for (var i = 0; i < list.length; i++) {
+      if (list[i].id != id) continue;
+      final updated = list[i].copyWith(pinned: !list[i].pinned);
+      list[i] = updated;
+      _entries
+        ..clear()
+        ..addAll(list);
+      _schedulePublish();
+      return updated.pinned;
+    }
+    return null;
+  }
+
+  /// Clears unpinned entries only — the "clear the noise, keep what I'm
+  /// investigating" action. [clear] still wipes everything.
+  void clearUnpinned() {
+    if (!DebugTools.enabled) return;
+    final kept = _entries.where((e) => e.pinned).toList(growable: false);
+    _entries
+      ..clear()
+      ..addAll(kept);
+    _errorCount = kept.where((e) => e.isError).length;
+    _schedulePublish();
+  }
+
   /// Records a request that just started. Returns the entry id so the
   /// interceptor can later swap it for a success/error entry via
   /// [completeApiSuccess] or [completeApiError]. Returns `null` in release.
@@ -110,8 +145,8 @@ class DebugLogger {
         subtitle: 'in-flight…',
         method: method,
         url: url,
-        queryParameters: queryParameters,
-        requestHeaders: requestHeaders,
+        queryParameters: _redact(queryParameters),
+        requestHeaders: _redact(requestHeaders),
         requestBody: _truncate(requestBody),
       ),
     );
@@ -144,9 +179,9 @@ class DebugLogger {
       url: url,
       statusCode: statusCode,
       duration: duration,
-      queryParameters: queryParameters,
-      requestHeaders: requestHeaders,
-      responseHeaders: responseHeaders,
+      queryParameters: _redact(queryParameters),
+      requestHeaders: _redact(requestHeaders),
+      responseHeaders: _redact(responseHeaders),
       requestBody: _truncate(requestBody),
       responseBody: _truncate(responseBody),
       responseBytes: responseBytes,
@@ -182,9 +217,9 @@ class DebugLogger {
       url: url,
       statusCode: statusCode,
       duration: duration,
-      queryParameters: queryParameters,
-      requestHeaders: requestHeaders,
-      responseHeaders: responseHeaders,
+      queryParameters: _redact(queryParameters),
+      requestHeaders: _redact(requestHeaders),
+      responseHeaders: _redact(responseHeaders),
       requestBody: _truncate(requestBody),
       responseBody: _truncate(responseBody),
       responseBytes: responseBytes,
@@ -241,11 +276,33 @@ class DebugLogger {
   void _add(DebugLogEntry entry) {
     _entries.addFirst(entry);
     if (entry.isError) _errorCount++;
+    _evict();
+    _schedulePublish();
+  }
+
+  /// Trims to [_maxEntries], oldest first, **skipping pinned entries**.
+  ///
+  /// Pinning would be pointless if the buffer evicted the pin anyway. Pinned
+  /// entries are held back and re-appended, so the cap is enforced against
+  /// unpinned traffic only. If everything is pinned the buffer is allowed to
+  /// exceed the cap rather than silently discarding something the user
+  /// explicitly asked to keep — [_maxPinned] bounds that.
+  void _evict() {
+    if (_entries.length <= _maxEntries) return;
+    final kept = <DebugLogEntry>[];
     while (_entries.length > _maxEntries) {
       final removed = _entries.removeLast();
+      if (removed.pinned && kept.length < _maxPinned) {
+        kept.add(removed);
+        continue;
+      }
       if (removed.isError) _errorCount--;
     }
-    _schedulePublish();
+    // Oldest-last ordering is preserved: `kept` came off the tail newest-first,
+    // so appending in order restores their original relative positions.
+    for (final e in kept) {
+      _entries.addLast(e);
+    }
   }
 
   bool _replace(int id, DebugLogEntry newEntry) {
@@ -294,8 +351,53 @@ class DebugLogger {
       total: _entries.length,
       errors: _errorCount,
     );
-    _entriesNotifier.value = List<DebugLogEntry>.of(_entries, growable: false);
+    final snapshot = List<DebugLogEntry>.of(_entries, growable: false);
+    _entriesNotifier.value = snapshot;
+    // Piggy-backs on the existing coalesced publish rather than adding a second
+    // scheduler. SessionStore debounces again on top, so a burst of traffic
+    // produces one write, not one per request.
+    if (DebugTools.persistSession) {
+      SessionStore.instance.scheduleSave(snapshot);
+    }
   }
+
+  /// Loads the previous run's entries and prepends them, oldest-relative order
+  /// preserved. Called by [DebugTools.init] when persistence is on.
+  ///
+  /// The restored file is deleted immediately: it has served its purpose, and
+  /// keeping it would resurrect the same entries on a third launch long after
+  /// they stopped being relevant.
+  Future<int> restorePreviousSession() async {
+    if (!DebugTools.enabled) return 0;
+    final restored = await SessionStore.instance.restore();
+    if (restored.isEmpty) return 0;
+    // Append to the tail — these are older than anything captured this run.
+    for (final e in restored) {
+      _entries.addLast(e);
+      if (e.isError) _errorCount++;
+      // Ids come from the previous process, so bump the counter past them to
+      // keep this run's ids unique against the restored ones.
+      if (e.id >= _nextId) _nextId = e.id + 1;
+    }
+    _evict();
+    await SessionStore.instance.clear();
+    _schedulePublish();
+    return restored.length;
+  }
+
+  /// Masks secrets before an entry is stored, under [RedactionMode.drop] only.
+  ///
+  /// Applied here rather than in the Dio interceptor so it covers every capture
+  /// path, including apps driving [DebugLogger] from a non-Dio client.
+  ///
+  /// Under [RedactionMode.hide] the raw value is deliberately kept so the user
+  /// can reveal it on demand; masking then happens at render/export time via
+  /// `DebugTools.visible`. That is a weaker guarantee — the secret is in memory
+  /// — which is exactly why it isn't the default.
+  Map<String, String>? _redact(Map<String, String>? map) =>
+      DebugTools.redaction.mode == RedactionMode.drop
+          ? DebugTools.redaction.apply(map)
+          : map;
 
   String _shortPath(String url) {
     final qIndex = url.indexOf('?');

@@ -108,10 +108,15 @@ void main() {
     await tester.tap(find.text('Headers'));
     await tester.pumpAndSettle();
 
-    expect(
-      await _copyFromSection(tester, 'Request headers', 'Copy'),
-      'Authorization: Bearer tok_123\nAccept: application/json',
+    final reqHeaders = await _copyFromSection(
+      tester,
+      'Request headers',
+      'Copy',
     );
+    // Masked at capture, so what reaches the clipboard — and from there a bug
+    // report — carries no live credential.
+    expect(reqHeaders, 'Authorization: Bearer ••••\nAccept: application/json');
+    expect(reqHeaders, isNot(contains('tok_123')));
     expect(
       await _copyFromSection(tester, 'Response headers', 'Copy'),
       'content-type: application/json\nx-request-id: req_abc',
@@ -126,7 +131,7 @@ void main() {
     expect(
       await _copyFromSection(tester, 'Request headers', 'All'),
       '# Request headers\n'
-      'Authorization: Bearer tok_123\nAccept: application/json\n\n'
+      'Authorization: Bearer ••••\nAccept: application/json\n\n'
       '# Response headers\n'
       'content-type: application/json\nx-request-id: req_abc',
     );
