@@ -1,0 +1,11 @@
+# Build output is checked into this repo, so pub would otherwise ship it —
+# a 45 MB test-cache .dill made the published archive 15 MB compressed.
+build/
+example/build/
+
+# Not useful to consumers of the package.
+example/android/
+example/macos/
+example/integration_test/
+example/test_driver/
+.dart_tool/

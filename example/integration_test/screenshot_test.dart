@@ -35,27 +35,6 @@ void main() {
     await tester.pumpAndSettle();
   }
 
-  /// Settles by fixed frames instead of pumpAndSettle.
-  ///
-  /// The sheet openers await showModalBottomSheet, and the Errors tab runs a
-  /// repeating pulse, so under the live binding pumpAndSettle spins past the
-  /// end of the test instead of returning.
-  Future<void> settleFrames(WidgetTester tester, [int frames = 30]) async {
-    for (var i = 0; i < frames; i++) {
-      await tester.pump(const Duration(milliseconds: 50));
-    }
-  }
-
-  Future<void> shotRaw(WidgetTester tester, String name) async {
-    try {
-      await binding.convertFlutterSurfaceToImage();
-    } catch (_) {
-      // Already converted for this surface — fine.
-    }
-    await settleFrames(tester, 10);
-    await binding.takeScreenshot(name);
-  }
-
   Future<void> shot(WidgetTester tester, String name) async {
     try {
       await binding.convertFlutterSurfaceToImage();
