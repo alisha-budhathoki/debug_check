@@ -3,6 +3,11 @@
 Isolated, drop-in **in-app debug tools** for Flutter — fully decoupled from the
 host app and switched on with a single flag.
 
+<p align="center">
+  <img width="300" src="https://raw.githubusercontent.com/alisha-budhathoki/debug_check/main/screenshots/00-demo.gif" alt="The debug_deck overlay: tapping the floating bug chip opens the inspector, drilling into a failing 500 call, searching inside a response body, then the Autopsy grade, live FPS and the app-info snapshot"><br>
+  <sub>Bug chip → inspector → a failing call → search a response → <b>Autopsy grade</b> → live FPS</sub>
+</p>
+
 <table>
   <tr>
     <td align="center" width="33%">

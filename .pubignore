@@ -3,6 +3,11 @@
 build/
 example/build/
 
+# The README's hero GIF is 2.7 MB and loads from raw.githubusercontent, so the
+# archive never needs it. The static PNGs below it DO ship — pubspec's
+# `screenshots:` entries must resolve inside the package.
+screenshots/00-demo.gif
+
 # Not useful to consumers of the package.
 example/android/
 example/macos/
