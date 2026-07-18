@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.6.1
+
+Documentation only — no code changes from 0.6.0.
+
+- The README now leads with an animated demo of the overlay: the bug chip, the
+  inspector, a failing 500 in detail, search inside a response body, the Autopsy
+  grade, live FPS and the app-info snapshot. pub.dev has no way to refresh a
+  README without a release, which is what this version is for.
+
 ## 0.6.0
 
 **Breaking**
