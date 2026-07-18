@@ -2,16 +2,9 @@ import 'package:debug_deck/debug_deck.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 
-/// Demo host app for debug_deck.
-///
-/// Shows the full integration (init + [DebugToolsHost] + Dio interceptor +
-/// route observer) and seeds the inspector with realistic sample traffic so the
-/// floating bug chip has something to show the moment it opens.
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // 1. One init at startup — gate this on your own dev/staging flag in a real
-  //    app. Here it's always on so the overlay is visible in the demo.
   DebugTools.init(
     enabled: true,
     appInfo: const DebugAppInfo(
@@ -112,10 +105,6 @@ class HomeScreen extends StatelessWidget {
   }
 }
 
-/// Populates the inspector with a realistic spread of traffic: fast/slow calls,
-/// a server error, a 404, a duplicate pair, plus an info log and an error — so
-/// the log list, API detail, insight chips, search and duplicate detection all
-/// have something to show.
 void seedDemoData() {
   final log = DebugLogger.instance;
   const base = 'https://api.tradingapp.dev';

@@ -402,17 +402,19 @@ class _RingPainter extends CustomPainter {
     final rect = Offset.zero & size;
     final center = rect.center;
     final radius = (size.shortestSide - stroke) / 2;
-    final track = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = stroke
-      ..color = Colors.white.withValues(alpha: 0.10);
+    final track =
+        Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = stroke
+          ..color = Colors.white.withValues(alpha: 0.10);
     canvas.drawCircle(center, radius, track);
 
-    final arc = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = stroke
-      ..strokeCap = StrokeCap.round
-      ..color = color;
+    final arc =
+        Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = stroke
+          ..strokeCap = StrokeCap.round
+          ..color = color;
     canvas.drawArc(
       Rect.fromCircle(center: center, radius: radius),
       -1.5708, // -90° (12 o'clock)

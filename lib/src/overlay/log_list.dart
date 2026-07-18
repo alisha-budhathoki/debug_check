@@ -554,7 +554,13 @@ class _ViewerHeader extends StatelessWidget {
           // whichever tab it selects. A segmented control (not loose chips)
           // gives the tabs the visual weight of a real switcher.
           const SizedBox(height: 12),
-          _TabBar(filter: filter, onFilterChange: onFilterChange),
+          _TabBar(
+            filter: filter,
+            // Counted off the unfiltered entry list, so the badge always
+            // reflects every error captured — not just what search matches.
+            errorCount: entries.where((e) => e.isError).length,
+            onFilterChange: onFilterChange,
+          ),
           // Context layer for the active tab — visually lighter than the tabs
           // above it. A fixed-height insight strip (so switching tabs never
           // resizes the header) with at-a-glance metrics, then the search box.
@@ -1033,8 +1039,13 @@ class _InsightStrip extends StatelessWidget {
 /// lost under the rest of the header.
 class _TabBar extends StatelessWidget {
   final String filter;
+  final int errorCount;
   final ValueChanged<String> onFilterChange;
-  const _TabBar({required this.filter, required this.onFilterChange});
+  const _TabBar({
+    required this.filter,
+    required this.errorCount,
+    required this.onFilterChange,
+  });
 
   // (id, label). Log filters first, then the tool panels.
   static const _tabs = <(String, String)>[
@@ -1062,9 +1073,14 @@ class _TabBar extends StatelessWidget {
         children: [
           for (final t in _tabs)
             Expanded(
+              // The Errors tab claims ~1.5× width once errors exist, so the
+              // count badge sits beside the label instead of squeezing it.
+              // Flips once (0 → non-zero), not per new error.
+              flex: t.$1 == 'errors' && errorCount > 0 ? 3 : 2,
               child: _TabSegment(
                 label: t.$2,
                 selected: filter == t.$1,
+                badgeCount: t.$1 == 'errors' ? errorCount : 0,
                 onTap: () {
                   HapticFeedback.selectionClick();
                   onFilterChange(t.$1);
@@ -1077,50 +1093,233 @@ class _TabBar extends StatelessWidget {
   }
 }
 
-class _TabSegment extends StatelessWidget {
+// Alert palette for the Errors tab.
+const Color _alertRed = Color(0xFFE5484D); // badge fill / glow source
+const Color _alertText = Color(0xFFFF938C); // label on the unselected wash
+const Color _alertWash = Color(0xFF2B1518); // flat unselected background
+const Color _alertPeak = Color(0xFF7A2830); // unselected fill at pulse peak
+const Color _alertThumb = Color(0xFF5E2126); // raised background when selected
+
+class _TabSegment extends StatefulWidget {
   final String label;
   final bool selected;
+
+  /// When > 0 the segment takes the alert treatment and carries a count badge.
+  /// Used by the Errors tab so a failing app is obvious the moment the deck
+  /// opens, without the user having to visit the tab to find out.
+  final int badgeCount;
   final VoidCallback onTap;
   const _TabSegment({
     required this.label,
     required this.selected,
     required this.onTap,
+    this.badgeCount = 0,
   });
 
   @override
+  State<_TabSegment> createState() => _TabSegmentState();
+}
+
+class _TabSegmentState extends State<_TabSegment>
+    with SingleTickerProviderStateMixin {
+  // Colour alone can't compete with the raised thumb for attention, and making
+  // it loud enough to try would just read as a second selected tab. Motion is
+  // what actually catches the eye on first open, so the segment breathes a red
+  // glow for a few cycles and then settles into a calm, permanently-tinted
+  // state. It re-arms whenever the count climbs, so an app that keeps throwing
+  // errors keeps glowing, then quiets down once the errors stop.
+  static const _pulseCycles = 4;
+  late final AnimationController _pulse;
+  int _lastCount = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _pulse = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1150),
+    );
+    _lastCount = widget.badgeCount;
+    // Errors already present when the deck first builds — the exact case the
+    // pulse exists for.
+    if (widget.badgeCount > 0 && !widget.selected) _armPulse();
+  }
+
+  // Bumped on every arm so a superseded run's completion callback can't reset
+  // the glow out from under the run that replaced it.
+  int _pulseGeneration = 0;
+
+  void _armPulse() {
+    final generation = ++_pulseGeneration;
+    _pulse.reset();
+    // repeat() leaves the controller wherever the last traversal ended, which
+    // isn't reliably 0 — without this the tab keeps a faint permanent halo.
+    _pulse.repeat(reverse: true, count: _pulseCycles * 2).whenCompleteOrCancel(
+      () {
+        if (mounted && generation == _pulseGeneration) _pulse.value = 0;
+      },
+    );
+  }
+
+  @override
+  void didUpdateWidget(_TabSegment old) {
+    super.didUpdateWidget(old);
+    // Visiting the tab is acknowledgement: stop nagging.
+    if (widget.selected) {
+      if (_pulse.isAnimating) _pulse.stop();
+    } else if (widget.badgeCount > _lastCount) {
+      _armPulse();
+    }
+    _lastCount = widget.badgeCount;
+  }
+
+  @override
+  void dispose() {
+    _pulse.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final alerting = widget.badgeCount > 0;
+    final selected = widget.selected;
+
+    final Color fill;
+    if (alerting) {
+      fill = selected ? _alertThumb : _alertWash;
+    } else {
+      fill = selected ? const Color(0xFF2D333B) : Colors.transparent;
+    }
+    final labelColor =
+        alerting
+            ? (selected ? Colors.white : _alertText)
+            : (selected ? Colors.white : Colors.white54);
+
+    final content = Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Flexible(
+          child: Text(
+            widget.label,
+            maxLines: 1,
+            softWrap: false,
+            overflow: TextOverflow.fade,
+            style: TextStyle(
+              color: labelColor,
+              fontSize: 11.5,
+              fontWeight:
+                  selected || alerting ? FontWeight.w700 : FontWeight.w500,
+              letterSpacing: 0.2,
+            ),
+          ),
+        ),
+        if (alerting) ...[
+          const SizedBox(width: 5),
+          _ErrorBadge(count: widget.badgeCount, onThumb: selected),
+        ],
+      ],
+    );
+
+    Widget segment(Color background) => AnimatedContainer(
+      duration: const Duration(milliseconds: 160),
+      curve: Curves.easeOut,
+      alignment: Alignment.center,
+      padding: alerting ? const EdgeInsets.symmetric(horizontal: 5) : null,
+      decoration: BoxDecoration(
+        color: background,
+        borderRadius: BorderRadius.circular(8),
+        // Only the *selected* segment gets a shadow. An unselected alerting tab
+        // stays deliberately flat — even at the pulse peak — so the control
+        // never looks like it has two active segments. The tint, badge and
+        // motion carry the urgency; the raised thumb keeps meaning "current
+        // tab".
+        boxShadow:
+            selected
+                ? [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.28),
+                    blurRadius: 4,
+                    offset: const Offset(0, 1),
+                  ),
+                ]
+                : null,
+      ),
+      child: content,
+    );
+
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
-      onTap: onTap,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 160),
-        curve: Curves.easeOut,
-        alignment: Alignment.center,
-        decoration: BoxDecoration(
-          color: selected ? const Color(0xFF2D333B) : Colors.transparent,
-          borderRadius: BorderRadius.circular(8),
-          boxShadow:
-              selected
-                  ? [
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.28),
-                      blurRadius: 4,
-                      offset: const Offset(0, 1),
+      onTap: widget.onTap,
+      child:
+          alerting && !selected
+              ? AnimatedBuilder(
+                animation: _pulse,
+                builder: (context, _) {
+                  final t = Curves.easeInOut.transform(_pulse.value);
+                  return DecoratedBox(
+                    key: const Key('debugDeck.errorTabGlow'),
+                    // The halo sits on an outer box so it renders behind the
+                    // segment fill and bleeds out over the track — that spill
+                    // past the segment's own edges is what catches the eye from
+                    // the corner of the screen.
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(8),
+                      boxShadow: [
+                        BoxShadow(
+                          color: _alertRed.withValues(alpha: 0.85 * t),
+                          blurRadius: 18,
+                          spreadRadius: 3 * t,
+                        ),
+                      ],
                     ),
-                  ]
-                  : null,
-        ),
-        child: Text(
-          label,
-          maxLines: 1,
-          softWrap: false,
-          overflow: TextOverflow.fade,
-          style: TextStyle(
-            color: selected ? Colors.white : Colors.white54,
-            fontSize: 11.5,
-            fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
-            letterSpacing: 0.2,
-          ),
+                    // The fill brightens in step with the halo. Halo alone was
+                    // too close in value to the resting wash to read as motion.
+                    child: segment(Color.lerp(_alertWash, _alertPeak, t)!),
+                  );
+                },
+              )
+              : segment(fill),
+    );
+  }
+}
+
+/// Count pill for the Errors tab — sized to sit *inside* the segment as a
+/// compact numeral rather than a blob that rivals the label. Caps at 99+ so a
+/// flood of errors can never widen the segment past its share of the track.
+class _ErrorBadge extends StatelessWidget {
+  final int count;
+
+  /// On the selected (raised red) segment the solid fill loses contrast, so the
+  /// badge inverts to a light chip instead.
+  final bool onThumb;
+  const _ErrorBadge({required this.count, required this.onThumb});
+
+  @override
+  Widget build(BuildContext context) {
+    final text = count > 99 ? '99+' : '$count';
+    return Container(
+      // Fixed height rather than vertical padding: letting the font's line
+      // metrics set the height made the pill taller than it was wide, so it
+      // rendered as a capsule stood on end instead of a count chip.
+      height: 15,
+      padding: const EdgeInsets.symmetric(horizontal: 5),
+      constraints: const BoxConstraints(minWidth: 19),
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        color: onThumb ? Colors.white.withValues(alpha: 0.92) : _alertRed,
+        borderRadius: BorderRadius.circular(4.5),
+      ),
+      child: Text(
+        text,
+        maxLines: 1,
+        softWrap: false,
+        style: TextStyle(
+          color: onThumb ? const Color(0xFF5E2126) : Colors.white,
+          fontSize: 10,
+          fontWeight: FontWeight.w800,
+          letterSpacing: 0.1,
+          height: 1.0,
         ),
       ),
     );

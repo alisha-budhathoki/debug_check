@@ -264,11 +264,24 @@ class _ApiDetailScreenState extends State<_ApiDetailScreen>
   }
 
   List<_DetailSectionData> _requestSections(DebugLogEntry e) {
+    final query = e.queryParameters ?? const <String, String>{};
     return [
-      if (e.queryParameters?.isNotEmpty ?? false)
+      if (query.isNotEmpty)
         _DetailSectionData(
           title: 'Query parameters',
-          rows: e.queryParameters!.entries.toList(),
+          rows: query.entries.toList(),
+          // Plain `key: value` lines mirror what's on screen; the query-string
+          // form is the one you actually paste into a URL or a client, so both
+          // are offered rather than guessing which is wanted.
+          copyText: _kvLines(query),
+          copyLabel: 'Copy',
+          copies: [
+            _CopyAction(
+              icon: Icons.link,
+              label: 'Query',
+              text: _queryString(query),
+            ),
+          ],
         ),
       if (e.requestBody?.isNotEmpty ?? false)
         _DetailSectionData(
@@ -289,20 +302,47 @@ class _ApiDetailScreenState extends State<_ApiDetailScreen>
 
   List<_DetailSectionData> _headerSections(DebugLogEntry e) {
     final out = <_DetailSectionData>[];
-    if (e.requestHeaders?.isNotEmpty ?? false) {
+    final req = e.requestHeaders ?? const <String, String>{};
+    final res = e.responseHeaders ?? const <String, String>{};
+    if (req.isNotEmpty) {
       out.add(
         _DetailSectionData(
           title: 'Request headers',
-          rows: e.requestHeaders!.entries.toList(),
+          rows: req.entries.toList(),
+          // `Name: value` is already wire format, so a copied header block
+          // pastes straight into curl, an HTTP client or a bug report.
+          copyText: _kvLines(req),
+          copyLabel: 'Copy',
         ),
       );
     }
-    if (e.responseHeaders?.isNotEmpty ?? false) {
+    if (res.isNotEmpty) {
       out.add(
         _DetailSectionData(
           title: 'Response headers',
-          rows: e.responseHeaders!.entries.toList(),
+          rows: res.entries.toList(),
+          copyText: _kvLines(res),
+          copyLabel: 'Copy',
         ),
+      );
+    }
+    if (req.isNotEmpty && res.isNotEmpty) {
+      // Both blocks at once — the usual thing to attach to a report, and
+      // otherwise two taps plus a manual splice.
+      out.first = _DetailSectionData(
+        title: out.first.title,
+        rows: out.first.rows,
+        copyText: out.first.copyText,
+        copyLabel: out.first.copyLabel,
+        copies: [
+          _CopyAction(
+            icon: Icons.copy_all_outlined,
+            label: 'All',
+            text:
+                '# Request headers\n${_kvLines(req)}\n\n'
+                '# Response headers\n${_kvLines(res)}',
+          ),
+        ],
       );
     }
     if (out.isEmpty) {
@@ -318,21 +358,24 @@ class _ApiDetailScreenState extends State<_ApiDetailScreen>
   }
 
   List<_DetailSectionData> _responseSections(DebugLogEntry e) {
+    final statusRows = <MapEntry<String, String>>[
+      MapEntry(
+        'Status',
+        e.statusCode != null
+            ? '${e.statusCode} ${_statusText(e.statusCode!)}'
+            : (e.isInFlight ? 'in-flight' : 'error'),
+      ),
+      if (e.duration != null)
+        MapEntry('Duration', '${e.duration!.inMilliseconds} ms'),
+      if (e.responseBytes != null)
+        MapEntry('Size', _apiBytes(e.responseBytes!)),
+    ];
     return [
       _DetailSectionData(
         title: 'Status',
-        rows: [
-          MapEntry(
-            'Status',
-            e.statusCode != null
-                ? '${e.statusCode} ${_statusText(e.statusCode!)}'
-                : (e.isInFlight ? 'in-flight' : 'error'),
-          ),
-          if (e.duration != null)
-            MapEntry('Duration', '${e.duration!.inMilliseconds} ms'),
-          if (e.responseBytes != null)
-            MapEntry('Size', _apiBytes(e.responseBytes!)),
-        ],
+        rows: statusRows,
+        copyText: _rowLines(statusRows),
+        copyLabel: 'Copy',
       ),
       if (e.responseBody?.isNotEmpty ?? false)
         _DetailSectionData(
@@ -374,6 +417,23 @@ class _ApiDetailScreenState extends State<_ApiDetailScreen>
     if (b < 1024 * 1024) return '${(b / 1024).toStringAsFixed(1)}KB';
     return '${(b / 1024 / 1024).toStringAsFixed(2)}MB';
   }
+
+  /// `key: value` per line — the same shape the section renders, so what lands
+  /// on the clipboard is what the user was looking at.
+  static String _kvLines(Map<String, String> map) =>
+      map.entries.map((e) => '${e.key}: ${e.value}').join('\n');
+
+  static String _rowLines(List<MapEntry<String, String>> rows) =>
+      rows.map((e) => '${e.key}: ${e.value}').join('\n');
+
+  /// `a=b&c=d`, percent-encoded — paste-ready for a URL or an HTTP client.
+  static String _queryString(Map<String, String> q) => q.entries
+      .map(
+        (e) =>
+            '${Uri.encodeQueryComponent(e.key)}='
+            '${Uri.encodeQueryComponent(e.value)}',
+      )
+      .join('&');
 
   static String _apiTimeFull(DateTime t) =>
       '${t.year}-${_pad2(t.month)}-${_pad2(t.day)} '
@@ -707,7 +767,10 @@ class _SearchableDetailState extends State<_SearchableDetail> {
     return Padding(
       padding: const EdgeInsets.only(bottom: 10),
       child: _DetailSection(
-        title: '${s.title}  (${s.rows.length})',
+        // The count only means something for key/value sections. A body-only
+        // section has no rows, so the old unconditional suffix rendered
+        // "RESPONSE BODY (0)" over a body that was plainly there.
+        title: s.rows.isEmpty ? s.title : '${s.title}  (${s.rows.length})',
         actions: [
           if (s.copyText != null && s.copyText!.isNotEmpty)
             _SectionButton(

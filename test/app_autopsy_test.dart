@@ -25,13 +25,13 @@ DebugLogEntry _api({
 }
 
 DebugLogEntry _error(int id, String msg) => DebugLogEntry(
-      id: id,
-      timestamp: DateTime(2026, 1, 1, 12, 0, id),
-      kind: DebugLogKind.platformError,
-      title: 'Uncaught error',
-      subtitle: msg,
-      errorMessage: msg,
-    );
+  id: id,
+  timestamp: DateTime(2026, 1, 1, 12, 0, id),
+  kind: DebugLogKind.platformError,
+  title: 'Uncaught error',
+  subtitle: msg,
+  errorMessage: msg,
+);
 
 void main() {
   final at = DateTime(2026, 1, 1, 12, 0, 0);
@@ -56,23 +56,29 @@ void main() {
       expect(a.findings.any((f) => f.severity == AutopsySeverity.good), isTrue);
     });
 
-    test('server 5xx errors surface as a critical finding and drop the grade', () {
-      final entries = [
-        _api(id: 1, kind: DebugLogKind.apiSuccess, status: 200),
-        _api(id: 2, kind: DebugLogKind.apiError, status: 500),
-        _api(id: 3, kind: DebugLogKind.apiError, status: 503),
-      ];
-      final a = AppAutopsy.diagnose(
-        entries: entries,
-        perf: PerfStats.empty,
-        duplicates: const {},
-        now: at,
-      );
-      expect(a.criticalCount, greaterThan(0));
-      expect(a.network.score, lessThan(100));
-      expect(a.grade.index, greaterThan(AutopsyGrade.a.index)); // worse than A
-      expect(a.findings.first.severity, AutopsySeverity.critical);
-    });
+    test(
+      'server 5xx errors surface as a critical finding and drop the grade',
+      () {
+        final entries = [
+          _api(id: 1, kind: DebugLogKind.apiSuccess, status: 200),
+          _api(id: 2, kind: DebugLogKind.apiError, status: 500),
+          _api(id: 3, kind: DebugLogKind.apiError, status: 503),
+        ];
+        final a = AppAutopsy.diagnose(
+          entries: entries,
+          perf: PerfStats.empty,
+          duplicates: const {},
+          now: at,
+        );
+        expect(a.criticalCount, greaterThan(0));
+        expect(a.network.score, lessThan(100));
+        expect(
+          a.grade.index,
+          greaterThan(AutopsyGrade.a.index),
+        ); // worse than A
+        expect(a.findings.first.severity, AutopsySeverity.critical);
+      },
+    );
 
     test('rendering stalls produce a critical rendering finding', () {
       const perf = PerfStats(
@@ -99,9 +105,11 @@ void main() {
       expect(a.rendering.hasData, isTrue);
       expect(a.rendering.score, lessThan(80));
       expect(
-        a.findings.any((f) =>
-            f.subsystem == 'Rendering' &&
-            f.severity == AutopsySeverity.critical),
+        a.findings.any(
+          (f) =>
+              f.subsystem == 'Rendering' &&
+              f.severity == AutopsySeverity.critical,
+        ),
         isTrue,
       );
     });
