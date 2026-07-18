@@ -14,6 +14,9 @@ void main() {
   Future<void> boot(WidgetTester tester) async {
     DebugTools.init(
       enabled: true,
+      // Same config as the demo's main(), so the redaction shots show what a
+      // reader running `flutter run` will actually see.
+      redaction: DebugRedaction.standard(mode: RedactionMode.hide),
       appInfo: const DebugAppInfo(
         version: '1.0.0 (42)',
         environmentName: 'staging',
@@ -30,6 +33,27 @@ void main() {
   Future<void> openViewer(WidgetTester tester) async {
     await tester.tap(find.byIcon(Icons.bug_report_rounded).first);
     await tester.pumpAndSettle();
+  }
+
+  /// Settles by fixed frames instead of pumpAndSettle.
+  ///
+  /// The sheet openers await showModalBottomSheet, and the Errors tab runs a
+  /// repeating pulse, so under the live binding pumpAndSettle spins past the
+  /// end of the test instead of returning.
+  Future<void> settleFrames(WidgetTester tester, [int frames = 30]) async {
+    for (var i = 0; i < frames; i++) {
+      await tester.pump(const Duration(milliseconds: 50));
+    }
+  }
+
+  Future<void> shotRaw(WidgetTester tester, String name) async {
+    try {
+      await binding.convertFlutterSurfaceToImage();
+    } catch (_) {
+      // Already converted for this surface — fine.
+    }
+    await settleFrames(tester, 10);
+    await binding.takeScreenshot(name);
   }
 
   Future<void> shot(WidgetTester tester, String name) async {
@@ -97,8 +121,42 @@ void main() {
   testWidgets('05 app info', (tester) async {
     await boot(tester);
     await openViewer(tester);
-    await tester.tap(find.text('Info'));
+    // Renamed from 'Info': DebugLogKind.info is what breadcrumbs are, and the
+    // panel owning that id is why breadcrumbs had no filter of their own.
+    await tester.tap(find.text('App'));
     await tester.pumpAndSettle();
     await shot(tester, '05-app-info');
+  });
+
+  testWidgets('06 secrets masked, revealable', (tester) async {
+    await boot(tester);
+    await openViewer(tester);
+    await tester.tap(
+      find.textContaining('quotes/UNKNOWN', findRichText: true).first,
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Headers'));
+    await tester.pumpAndSettle();
+    await shot(tester, '06-secrets-masked');
+
+    await tester.tap(find.byIcon(Icons.visibility_outlined));
+    await tester.pumpAndSettle();
+    await shot(tester, '07-secrets-revealed');
+  });
+
+  // NOTE: the filter and session-export sheets are not captured here.
+  // Their openers await showModalBottomSheet, and under the live integration
+  // binding that pending future keeps pumping after the test body ends
+  // ("inTest is not true"), which then corrupts the following test. They are
+  // covered by widget tests instead; capture them by hand if needed.
+
+  testWidgets('10 pinned row survives eviction', (tester) async {
+    await boot(tester);
+    await openViewer(tester);
+    await tester.longPress(
+      find.textContaining('quotes/UNKNOWN', findRichText: true).first,
+    );
+    await tester.pumpAndSettle();
+    await shot(tester, '10-pinned');
   });
 }

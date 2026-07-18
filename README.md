@@ -6,7 +6,7 @@ host app and switched on with a single flag.
 <table>
   <tr>
     <td align="center" width="33%">
-      <img width="250" src="https://raw.githubusercontent.com/alisha-budhathoki/debug_check/main/screenshots/01-log-list.png" alt="Inspector log list with method/status badges, latency colours and duplicate detection"><br>
+      <img width="250" src="https://raw.githubusercontent.com/alisha-budhathoki/debug_check/main/screenshots/01-log-list.png" alt="Inspector log list with method/status badges, latency colours, a red Errors tab carrying an error count, and duplicate detection"><br>
       <sub><b>Inspector</b> · calls, errors &amp; duplicates</sub>
     </td>
     <td align="center" width="33%">
@@ -16,6 +16,20 @@ host app and switched on with a single flag.
     <td align="center" width="33%">
       <img width="250" src="https://raw.githubusercontent.com/alisha-budhathoki/debug_check/main/screenshots/02-api-detail.png" alt="API call detail with insight chips and cURL/JSON/HAR export"><br>
       <sub><b>Call detail</b> · insight chips &amp; export</sub>
+    </td>
+  </tr>
+  <tr>
+    <td align="center" width="33%">
+      <img width="250" src="https://raw.githubusercontent.com/alisha-budhathoki/debug_check/main/screenshots/06-secrets-masked.png" alt="Headers tab showing an Authorization header masked as Bearer with dots, preserving the last four characters"><br>
+      <sub><b>Secrets masked</b> · safe to paste anywhere</sub>
+    </td>
+    <td align="center" width="33%">
+      <img width="250" src="https://raw.githubusercontent.com/alisha-budhathoki/debug_check/main/screenshots/07-secrets-revealed.png" alt="The same Headers tab after tapping the eye toggle, showing the full bearer token"><br>
+      <sub><b>…revealed on demand</b> · one tap, reversible</sub>
+    </td>
+    <td align="center" width="33%">
+      <img width="250" src="https://raw.githubusercontent.com/alisha-budhathoki/debug_check/main/screenshots/08-pinned.png" alt="A log row pinned with a blue pin marker and blue border, exempt from ring-buffer eviction"><br>
+      <sub><b>Pin a row</b> · survives the 200-entry cap</sub>
     </td>
   </tr>
   <tr>

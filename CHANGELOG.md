@@ -1,5 +1,67 @@
 # Changelog
 
+## 0.6.0
+
+**Breaking**
+
+- `AppAutopsy.diagnose` no longer takes `duplicates`. It detects duplicate calls
+  itself over `entries`; pass `duplicateWindow:` to tune the 5s window. The old
+  signature required a map produced by a function that wasn't exported, so
+  callers could only pass `const {}` and silently lose the entire duplicate-call
+  branch of the network score — the README example never compiled.
+- Captured headers and query parameters are **masked by default**. Configure via
+  `DebugTools.init(redaction: ...)`, or `DebugRedaction.disabled` to opt out.
+- The App Info tab's filter id changed from `info` to `app`. `DebugLogKind.info`
+  is what breadcrumbs are, and the panel owning that id is why breadcrumbs never
+  got a filter of their own.
+
+**Added**
+
+- **Secret redaction.** The cURL/JSON/HAR exports are meant to be pasted into a
+  bug report, and were carrying live `Authorization` headers out of the device.
+  `DebugRedaction` masks at *capture* time, so a raw value never enters the
+  buffer and can't leak through a screenshot or an export surface added later.
+  Masked values keep their shape (`Bearer ••••4f2a`) so a Basic-where-you-
+  expected-Bearer bug stays visible; values under 12 characters are masked whole.
+- **`RedactionMode`** makes the trade-off explicit, because a secret you can
+  reveal later is a secret still in memory: `drop` (default, unrecoverable),
+  `hide` (retained, masked, revealable via an eye toggle in the API-detail
+  header), `off`. Revealing swaps every surface at once — headers, query, cURL,
+  JSON, HAR — so an export can never carry a value the screen calls hidden, and
+  resets to hidden on each launch.
+- **Session export.** Whole-session Markdown bug report, HAR archive, or
+  Autopsy-only, from the viewer header. Also `SessionExport.toMarkdown` /
+  `.toHar` as pure functions.
+- **Session persistence.** `DebugTools.init(persistSession: true)` writes the
+  session tail to disk so the next launch can show what the run that crashed was
+  doing. Off by default (it persists bodies), no-op on web, and adds no
+  dependency — `dart:io` behind the same conditional import used for platform
+  info, so `dio` remains the only dependency.
+- **Filtering.** Type (API / Errors / **Events**), status band (2xx–5xx plus
+  **Failed** for calls that never got a response), HTTP method, and pinned-only.
+  The badge counts axes rather than values, and Apply previews the match count
+  so a filtered-empty list can't masquerade as "no logs".
+- **Pinning.** Long-press a row to pin it; pinned rows are held back from
+  ring-buffer eviction (capped at 50) so the call you're investigating can't
+  scroll out of existence. Adds `DebugLogger.togglePin` and `clearUnpinned`.
+- `findDuplicateApiCalls` is now exported, alongside a new
+  `findDuplicateCallClusters` that returns distinct bursts.
+- The overlay's hide button is recoverable: an edge handle restores it, plus
+  `DebugTools.overlayHidden` / `showOverlay()`. It used to render nothing with
+  no way back, stranding the tools for the rest of the run.
+
+**Fixed**
+
+- `responseBytes` measured the pretty-printed string rather than the payload. A
+  4 MB binary download reported 19 bytes (the length of the literal text
+  `<binary 4096 bytes>`), and JSON was inflated by indentation. This fed the
+  `LARGE` insight chip, the Autopsy's heavy-payload finding and the log
+  subtitle — three surfaces giving wrong advice. Now uses `content-length`, then
+  the real byte length, and reports nothing rather than a fabricated number.
+- The Autopsy's duplicate penalty was roughly 3× too harsh: it counted flagged
+  rows while the comment above it said "clusters, not individual flagged rows".
+- Breadcrumbs had no way to be filtered to on their own.
+
 ## 0.5.1
 
 - Reworked the Autopsy so it no longer echoes numbers already shown elsewhere in
