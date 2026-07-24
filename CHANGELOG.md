@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.7.0
 
 - Duplicate-call detection is now scoped to the screen a request fired from.
   Previously two identical calls anywhere in the session were flagged, so
