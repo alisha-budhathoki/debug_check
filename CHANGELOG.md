@@ -1,5 +1,28 @@
 # Changelog
 
+## Unreleased
+
+- Duplicate-call detection is now scoped to the screen a request fired from.
+  Previously two identical calls anywhere in the session were flagged, so
+  ordinary navigation — leaving a screen and returning, or refreshing the same
+  endpoint from a different route — raised a false "duplicate API call" notice.
+  Now the warning only appears when the same request repeats *on the same
+  screen*, which is the real bug signal (a double-tap, a rebuild loop, an effect
+  re-firing). The screen is captured at request time from `DebugTools.routeObserver`;
+  apps that don't wire the observer keep whole-session grouping unchanged.
+  `DebugLogEntry` gains a `screen` field.
+- Duplicate matching is now exact on the request. The signature covers the full
+  URL (host + path, not just the path) and the request headers, on top of the
+  existing method, query and body. Two calls that share a path on different
+  hosts, or that differ in any header (a rotating bearer token, an
+  `Idempotency-Key`), are correctly treated as different requests.
+- **Breaking:** timing is no longer part of the duplicate definition. Two calls
+  that send the identical request from the same screen are now duplicates
+  however far apart they fired — the previous 5-second window is gone.
+  `AppAutopsy.diagnose` no longer takes `duplicateWindow`, and
+  `findDuplicateApiCalls` / `findDuplicateCallClusters` no longer take a
+  `window`. A cluster is now one request signature, not one time-window burst.
+
 ## 0.6.1
 
 Documentation only — no code changes from 0.6.0.

@@ -113,22 +113,18 @@ class AppAutopsy {
   /// Run the diagnosis. [now] is injectable so the result is deterministic in
   /// tests; production passes `DateTime.now()`.
   ///
-  /// Duplicate detection runs automatically over [entries]. Pass
-  /// [duplicateWindow] to widen or narrow what counts as "the same call fired
-  /// twice" (default 5s).
+  /// Duplicate detection runs automatically over [entries]: any two calls that
+  /// send the identical request (method, URL, query, headers, body) from the
+  /// same screen are duplicates, regardless of how far apart they fired.
   static AppAutopsy diagnose({
     required List<DebugLogEntry> entries,
     required PerfStats perf,
-    Duration duplicateWindow = const Duration(seconds: 5),
     DateTime? now,
   }) {
     final at = now ?? DateTime.now();
     final findings = <AutopsyFinding>[];
 
-    final clusters = findDuplicateCallClusters(
-      entries,
-      window: duplicateWindow,
-    );
+    final clusters = findDuplicateCallClusters(entries);
     final network = _diagnoseNetwork(entries, clusters.length, findings);
     final rendering = _diagnoseRendering(perf, findings);
     final stability = _diagnoseStability(entries, findings);
@@ -312,9 +308,9 @@ class AppAutopsy {
           subsystem: 'Network',
           title: 'The same request is firing more than once',
           detail:
-              'Identical calls landed within 5s of each other — a double-tap '
-              'or a rebuild loop. Debounce the trigger or guard the in-flight '
-              'request so it can\'t fire twice.',
+              'The identical request was sent more than once from the same '
+              'screen — a double-tap or a rebuild loop. Debounce the trigger or '
+              'guard the in-flight request so it can\'t fire twice.',
         ),
       );
     }

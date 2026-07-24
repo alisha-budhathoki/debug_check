@@ -13,6 +13,18 @@ import 'package:debug_deck/debug_deck.dart';
 class DebugDioInterceptor extends Interceptor {
   static const String _startKey = '_debug_started_at_us';
   static const String _idKey = '_debug_entry_id';
+  static const String _screenKey = '_debug_screen';
+
+  /// The route that was on top when the request was fired. Captured in
+  /// `onRequest` and replayed on completion, so an entry is attributed to the
+  /// screen that *started* the call even if the response arrives after the user
+  /// has navigated elsewhere. The observer's "unknown" sentinel is normalized
+  /// to null so duplicate detection treats it as "no screen" rather than a
+  /// distinct route named "—".
+  String? _currentScreen() {
+    final value = CurrentScreenObserver.current.value;
+    return (value.isEmpty || value == '—') ? null : value;
+  }
 
   @override
   void onRequest(RequestOptions options, RequestInterceptorHandler handler) {
@@ -22,12 +34,15 @@ class DebugDioInterceptor extends Interceptor {
       return;
     }
     options.extra[_startKey] = DateTime.now().microsecondsSinceEpoch;
+    final screen = _currentScreen();
+    options.extra[_screenKey] = screen;
     final id = DebugLogger.instance.logApiInFlight(
       method: options.method,
       url: options.uri.toString(),
       queryParameters: _stringifyMap(options.queryParameters),
       requestHeaders: _stringifyMap(options.headers),
       requestBody: _bodyToString(options.data),
+      screen: screen,
     );
     if (id != null) {
       options.extra[_idKey] = id;
@@ -58,6 +73,7 @@ class DebugDioInterceptor extends Interceptor {
       requestBody: _bodyToString(options.data),
       responseBody: responseBody,
       responseBytes: _bodyBytes(response.data, response.headers),
+      screen: _screenFrom(options),
     );
     handler.next(response);
   }
@@ -86,6 +102,7 @@ class DebugDioInterceptor extends Interceptor {
       responseBody: responseBody,
       responseBytes: _bodyBytes(err.response?.data, err.response?.headers),
       errorMessage: '${err.type.name}: ${err.message ?? err.toString()}',
+      screen: _screenFrom(options),
     );
     handler.next(err);
   }
@@ -93,6 +110,11 @@ class DebugDioInterceptor extends Interceptor {
   int? _idFrom(RequestOptions options) {
     final v = options.extra[_idKey];
     return v is int ? v : null;
+  }
+
+  String? _screenFrom(RequestOptions options) {
+    final v = options.extra[_screenKey];
+    return v is String ? v : null;
   }
 
   Duration _elapsed(RequestOptions options) {

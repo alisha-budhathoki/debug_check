@@ -125,8 +125,8 @@ class _AppInfoPanelState extends State<_AppInfoPanel> {
                     value:
                         dupEntries == 0
                             ? '0'
-                            : '$dupEntries call${dupEntries == 1 ? "" : "s"} '
-                                'in 5s windows',
+                            : '$dupEntries identical '
+                                'call${dupEntries == 1 ? "" : "s"}',
                     valueColor: dupEntries > 0 ? const Color(0xFFE5C07B) : null,
                   ),
                   _OverviewRow(

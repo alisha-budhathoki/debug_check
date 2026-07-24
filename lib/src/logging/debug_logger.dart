@@ -133,6 +133,7 @@ class DebugLogger {
     Map<String, String>? queryParameters,
     Map<String, String>? requestHeaders,
     String? requestBody,
+    String? screen,
   }) {
     if (!DebugTools.enabled) return null;
     final id = _nextId++;
@@ -148,6 +149,7 @@ class DebugLogger {
         queryParameters: _redact(queryParameters),
         requestHeaders: _redact(requestHeaders),
         requestBody: _truncate(requestBody),
+        screen: screen,
       ),
     );
     return id;
@@ -165,6 +167,7 @@ class DebugLogger {
     String? requestBody,
     String? responseBody,
     int? responseBytes,
+    String? screen,
   }) {
     if (!DebugTools.enabled) return;
     final entry = DebugLogEntry(
@@ -185,6 +188,7 @@ class DebugLogger {
       requestBody: _truncate(requestBody),
       responseBody: _truncate(responseBody),
       responseBytes: responseBytes,
+      screen: screen,
     );
     if (id != null && _replace(id, entry)) return;
     _add(entry);
@@ -203,6 +207,7 @@ class DebugLogger {
     String? responseBody,
     int? responseBytes,
     required String errorMessage,
+    String? screen,
   }) {
     if (!DebugTools.enabled) return;
     final entry = DebugLogEntry(
@@ -224,6 +229,7 @@ class DebugLogger {
       responseBody: _truncate(responseBody),
       responseBytes: responseBytes,
       errorMessage: errorMessage,
+      screen: screen,
     );
     if (id != null && _replace(id, entry)) return;
     _add(entry);

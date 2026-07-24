@@ -30,6 +30,18 @@ class DebugLogEntry {
   final String? errorMessage;
   final String? stackTrace;
 
+  /// The route that was on top when this call started, captured from
+  /// [CurrentScreenObserver] at request time (not completion time — a call may
+  /// resolve after the user has navigated away). Null when no screen observer
+  /// is wired or the route is unknown; duplicate detection then falls back to
+  /// grouping across the whole session.
+  ///
+  /// This is what makes "duplicate API call" a *bug* signal rather than noise:
+  /// the same request firing twice on the same screen is a double-tap or a
+  /// rebuild loop; the same request firing on two different screens is normal
+  /// navigation.
+  final String? screen;
+
   /// Kept out of the ring buffer's eviction. The 200-entry cap means the call
   /// you are investigating scrolls out of existence while you read it; pinning
   /// is the escape hatch.
@@ -53,6 +65,7 @@ class DebugLogEntry {
     this.responseBytes,
     this.errorMessage,
     this.stackTrace,
+    this.screen,
     this.pinned = false,
   });
 
@@ -74,6 +87,7 @@ class DebugLogEntry {
     responseBytes: responseBytes,
     errorMessage: errorMessage,
     stackTrace: stackTrace,
+    screen: screen,
     pinned: pinned ?? this.pinned,
   );
 

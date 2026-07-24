@@ -390,7 +390,7 @@ class _DuplicateWarningBar extends StatelessWidget {
           Expanded(
             child: Text(
               '$count duplicate API call${count == 1 ? "" : "s"} detected '
-              '(identical method, path, params & body within 5s)',
+              '(identical request repeated on the same screen)',
               style: const TextStyle(
                 color: Color(0xFFE5C07B),
                 fontSize: 11,

@@ -107,13 +107,15 @@ print(autopsy.grade.letter); // A / B / C / D / F
 print(autopsy.toMarkdown());
 ```
 
-Duplicate-call detection runs automatically over `entries`. Pass
-`duplicateWindow:` to change what counts as "the same call fired twice"
-(default 5s). The detectors are public too, if you want them on their own:
+Duplicate-call detection runs automatically over `entries`. Two calls are
+duplicates when they send the **identical request** — same method, URL, query,
+headers and body — from the **same screen**. Timing is not a factor: the same
+request twice is a duplicate however far apart it fired. The detectors are
+public too, if you want them on their own:
 
 ```dart
 findDuplicateApiCalls(entries);      // entry id → how many times it fired
-findDuplicateCallClusters(entries);  // distinct bursts, for counting problems
+findDuplicateCallClusters(entries);  // distinct requests, for counting problems
 ```
 
 ### 🧭 Breadcrumbs from any state layer — no coupling
@@ -155,9 +157,10 @@ flagged, so the problem call is obvious without opening anything.
 
 ### 🪪 Duplicate-call detection
 
-The inspector flags requests that fire **identical method + path + params + body
-within 5 s** of each other (a classic double-tap / rebuild bug), badges each row
-with the cluster size, and shows a warning bar with the count.
+The inspector flags requests that send the **identical request — method, URL,
+query, headers and body — from the same screen** (a classic double-tap / rebuild
+bug), badges each row with the count, and shows a warning bar with the total.
+Matching is on request data alone; timing is not part of it.
 
 ### 📤 One-tap export
 

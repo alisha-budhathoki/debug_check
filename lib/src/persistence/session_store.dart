@@ -112,6 +112,7 @@ class SessionStore {
     if (e.responseBytes != null) 'bytes': e.responseBytes,
     if (e.errorMessage != null) 'error': e.errorMessage,
     if (e.stackTrace != null) 'stack': e.stackTrace,
+    if (e.screen != null) 'screen': e.screen,
     if (e.pinned) 'pinned': true,
   };
 
@@ -147,6 +148,7 @@ class SessionStore {
         responseBytes: j['bytes'] as int?,
         errorMessage: j['error'] as String?,
         stackTrace: j['stack'] as String?,
+        screen: j['screen'] as String?,
         pinned: j['pinned'] == true,
       );
     } catch (_) {

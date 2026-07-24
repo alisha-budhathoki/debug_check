@@ -9,6 +9,8 @@ DebugLogEntry _api({
   int? bytes,
   String url = 'https://api.example.com/v1/orders',
   String method = 'GET',
+  String? screen,
+  Map<String, String>? headers,
 }) {
   return DebugLogEntry(
     id: id,
@@ -21,6 +23,8 @@ DebugLogEntry _api({
     statusCode: status,
     duration: Duration(milliseconds: ms),
     responseBytes: bytes,
+    screen: screen,
+    requestHeaders: headers,
   );
 }
 
@@ -177,19 +181,21 @@ void main() {
       expect(a.network.score, 97, reason: '100 - (1 cluster * 3)');
     });
 
-    test('two separate bursts count twice', () {
+    test('identical requests far apart in time are one cluster', () {
+      // Time is not part of the duplicate definition: the same request sent
+      // now and again 40s later is still the same request, so it is one
+      // cluster — not two time-separated bursts.
       final entries = [
         ...burst(2, startSecond: 1),
-        // Far enough apart to break the 5s run, so this is a second burst.
         ...burst(2, startSecond: 40),
       ];
-      expect(findDuplicateCallClusters(entries).length, 2);
+      expect(findDuplicateCallClusters(entries).length, 1);
       final a = AppAutopsy.diagnose(
         entries: entries,
         perf: PerfStats.empty,
         now: at,
       );
-      expect(a.network.score, 94, reason: '100 - (2 clusters * 3)');
+      expect(a.network.score, 97, reason: '100 - (1 cluster * 3)');
     });
 
     test('calls to distinct endpoints are not duplicates', () {
@@ -211,6 +217,99 @@ void main() {
         ).network.score,
         100,
       );
+    });
+
+    test('the same request from two screens is not a duplicate', () {
+      // The core of the same-screen rule: identical method/path/params/body,
+      // but fired from different routes. That is ordinary navigation traffic
+      // (visit orders, leave, come back), not a double-fire bug.
+      final entries = [
+        _api(id: 1, kind: DebugLogKind.apiSuccess, status: 200, screen: 'home'),
+        _api(
+          id: 2,
+          kind: DebugLogKind.apiSuccess,
+          status: 200,
+          screen: 'orders',
+        ),
+      ];
+      expect(findDuplicateCallClusters(entries), isEmpty);
+      expect(findDuplicateApiCalls(entries), isEmpty);
+      expect(
+        AppAutopsy.diagnose(
+          entries: entries,
+          perf: PerfStats.empty,
+          now: at,
+        ).network.score,
+        100,
+      );
+    });
+
+    test('the same request repeated on one screen is a duplicate', () {
+      final entries = [
+        _api(id: 1, kind: DebugLogKind.apiSuccess, status: 200, screen: 'cart'),
+        _api(id: 2, kind: DebugLogKind.apiSuccess, status: 200, screen: 'cart'),
+      ];
+      expect(findDuplicateCallClusters(entries).length, 1);
+      expect(findDuplicateApiCalls(entries).length, 2);
+    });
+
+    test('a null screen falls back to whole-session grouping', () {
+      // Apps that never wire the screen observer keep the old behaviour: with
+      // no screen to separate them, identical calls still group.
+      expect(findDuplicateCallClusters(burst(3)).length, 1);
+    });
+
+    test('exactly-same requests (incl. headers) are duplicates', () {
+      final entries = [
+        _api(
+          id: 1,
+          kind: DebugLogKind.apiSuccess,
+          status: 200,
+          headers: {'authorization': 'Bearer t', 'accept': 'json'},
+        ),
+        _api(
+          id: 2,
+          kind: DebugLogKind.apiSuccess,
+          status: 200,
+          // Same headers, declared in a different order — sorting must not
+          // split the pair.
+          headers: {'accept': 'json', 'authorization': 'Bearer t'},
+        ),
+      ];
+      expect(findDuplicateCallClusters(entries).length, 1);
+    });
+
+    test('a differing request header breaks the match', () {
+      // "Exactly same request" is literal: a per-request header (a rotating
+      // token, an idempotency key) makes these two different requests.
+      final entries = [
+        _api(
+          id: 1,
+          kind: DebugLogKind.apiSuccess,
+          status: 200,
+          headers: {'authorization': 'Bearer tokenA'},
+        ),
+        _api(
+          id: 2,
+          kind: DebugLogKind.apiSuccess,
+          status: 200,
+          headers: {'authorization': 'Bearer tokenB'},
+        ),
+      ];
+      expect(findDuplicateCallClusters(entries), isEmpty);
+    });
+
+    test('the same path on different hosts is not a duplicate', () {
+      final entries = [
+        _api(id: 1, kind: DebugLogKind.apiSuccess, status: 200),
+        _api(
+          id: 2,
+          kind: DebugLogKind.apiSuccess,
+          status: 200,
+          url: 'https://other-host.example.com/v1/orders',
+        ),
+      ];
+      expect(findDuplicateCallClusters(entries), isEmpty);
     });
 
     test('findDuplicateApiCalls is reachable from outside the package', () {
